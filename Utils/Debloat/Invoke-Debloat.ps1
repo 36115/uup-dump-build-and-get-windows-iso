@@ -9,7 +9,7 @@
     - Applies curated registry pack and TrustedInstaller offline keys via NSudoLC.
     - Modifies IntegratedServicesRegionPolicySet.json in-place (worldwide Edge uninstall).
     - Generates OEM associations, Notepad shortcut, and self-deleting SetupComplete.cmd.
-    - Executes component cleanup (/ResetBase) and runs the 33-point validation suite.
+    - Executes component cleanup (/ResetBase) and runs the 40-point validation suite.
 #>
 
 [CmdletBinding()]
@@ -87,7 +87,7 @@ function Remove-ForceDirectory([string]$targetPath) {
 
 function Remove-ForceFile([string]$targetFile) {
     if (Test-Path $targetFile) {
-        & takeown.exe /f $targetFile /d y *> $null
+        & takeown.exe /f $targetFile /a *> $null
         & icacls.exe $targetFile /grant *S-1-5-32-544:F /c /q *> $null
         Remove-Item -Path $targetFile -Force -ErrorAction SilentlyContinue
     }
@@ -136,9 +136,9 @@ foreach ($dir in $defenderFolders) {
 }
 
 # -------------------------------------------------------------
-# STEP 4: Purge Telemetry Binaries
+# STEP 4: Purge Telemetry, SmartScreen & BrowserCore Binaries
 # -------------------------------------------------------------
-Write-Step "[4/11] Deleting Telemetry Binaries..."
+Write-Step "[4/11] Deleting Telemetry, SmartScreen & BrowserCore Binaries..."
 $telemetryBinaries = @(
     "$MountDir\Windows\System32\diagtrack.dll",
     "$MountDir\Windows\System32\moshost.dll",
@@ -147,8 +147,35 @@ $telemetryBinaries = @(
 foreach ($bin in $telemetryBinaries) {
     if (Test-Path $bin) {
         Remove-ForceFile $bin
-        Write-Success "Deleted binary: $(Split-Path $bin -Leaf)"
+        Write-Success "Deleted telemetry binary: $(Split-Path $bin -Leaf)"
     }
+}
+
+$smartScreenFiles = @(
+    "$MountDir\Windows\System32\smartscreen.exe",
+    "$MountDir\Windows\System32\smartscreen.dll",
+    "$MountDir\Windows\System32\smartscreenps.dll",
+    "$MountDir\Windows\System32\en-US\smartscreen.exe.mui",
+    "$MountDir\Windows\SysWOW64\smartscreen.dll",
+    "$MountDir\Windows\SysWOW64\smartscreenps.dll"
+)
+foreach ($f in $smartScreenFiles) {
+    if (Test-Path $f) {
+        Remove-ForceFile $f
+        Write-Success "Deleted SmartScreen binary: $(Split-Path $f -Leaf)"
+    }
+}
+
+$appRepApps = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "Microsoft.Windows.AppRep.ChxApp_*" -Directory -ErrorAction SilentlyContinue
+foreach ($app in $appRepApps) {
+    Remove-ForceDirectory $app.FullName
+    Write-Success "Purged SmartScreen App: $($app.Name)"
+}
+
+$browserCoreDir = "$MountDir\Windows\BrowserCore"
+if (Test-Path $browserCoreDir) {
+    Remove-ForceDirectory $browserCoreDir
+    Write-Success "Purged BrowserCore directory: $browserCoreDir"
 }
 
 # -------------------------------------------------------------
@@ -233,13 +260,13 @@ try {
         $regRaw = [System.IO.File]::ReadAllText($RegPackPath, [System.Text.Encoding]::UTF8)
 
         $replacements = @(
-            @('HKEY_CLASSES_ROOT\\', 'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\Classes\'),
+            @('HKEY_CLASSES_ROOT\', 'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\Classes\'),
             @('HKEY_CLASSES_ROOT',   'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\Classes'),
-            @('HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\', 'HKEY_LOCAL_MACHINE\OFFLINE_SYSTEM\ControlSet001\'),
-            @('HKEY_LOCAL_MACHINE\\SYSTEM\\ControlSet001\\',     'HKEY_LOCAL_MACHINE\OFFLINE_SYSTEM\ControlSet001\'),
-            @('HKEY_LOCAL_MACHINE\\SOFTWARE\\', 'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\'),
-            @('HKEY_LOCAL_MACHINE\\Software\\', 'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\'),
-            @('HKEY_CURRENT_USER\\', 'HKEY_USERS\OFFLINE_DEFAULT\'),
+            @('HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\', 'HKEY_LOCAL_MACHINE\OFFLINE_SYSTEM\ControlSet001\'),
+            @('HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\',     'HKEY_LOCAL_MACHINE\OFFLINE_SYSTEM\ControlSet001\'),
+            @('HKEY_LOCAL_MACHINE\SOFTWARE\', 'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\'),
+            @('HKEY_LOCAL_MACHINE\Software\', 'HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE\'),
+            @('HKEY_CURRENT_USER\', 'HKEY_USERS\OFFLINE_DEFAULT\'),
             @('HKEY_CURRENT_USER',   'HKEY_USERS\OFFLINE_DEFAULT')
         )
         foreach ($r in $replacements) {
@@ -290,6 +317,29 @@ try {
         # Ensure HttpAcceptLanguageOptOut is persisted in Default Profile and Policies
         cmd /c "reg add `"HKU\OFFLINE_DEFAULT\Control Panel\International\User Profile`" /v HttpAcceptLanguageOptOut /t REG_DWORD /d 1 /f >nul 2>&1"
         cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut /t REG_DWORD /d 1 /f >nul 2>&1"
+
+        # 5g. CONFIGURE SMARTSCREEN & BROWSERCORE REGISTRY SETTINGS
+        Write-Info "Configuring SmartScreen disabled and removing BrowserCore registrations..."
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer`" /v SmartScreenEnabled /t REG_SZ /d off /f >nul 2>&1"
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v EnableSmartScreen /t REG_DWORD /d 0 /f >nul 2>&1"
+
+        $nativeHosts = @(
+            "HKLM\OFFLINE_SOFTWARE\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.microsoft.browsercore",
+            "HKLM\OFFLINE_SOFTWARE\Mozilla\NativeMessagingHosts\com.microsoft.browsercore"
+        )
+        if ($NSudoPath -and (Test-Path $NSudoPath)) {
+            $bcCmds = ($nativeHosts | ForEach-Object { "reg delete `"$_`" /f" }) -join "`r`n"
+            $bcBatch = Join-Path $env:TEMP "nsudo_browsercore.cmd"
+            Set-Content -Path $bcBatch -Value "@echo off`r`n$bcCmds`r`nexit" -Encoding ASCII
+            & $NSudoPath -U:T -P:E -Wait $bcBatch *> $null
+            Remove-Item $bcBatch -Force -ErrorAction SilentlyContinue
+        } else {
+            foreach ($nh in $nativeHosts) {
+                cmd /c "reg delete `"$nh`" /f >nul 2>&1"
+            }
+        }
+        Write-Success "SmartScreen disabled (SmartScreenEnabled=off, EnableSmartScreen=0) and BrowserCore registrations purged."
     }
 }
 finally {
@@ -416,10 +466,10 @@ if (-not $SkipCleanup) {
 }
 
 # -------------------------------------------------------------
-# STEP 11: 33-Point Automated Quality Gate / Validation
+# STEP 11: 40-Point Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 33-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 40-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -451,54 +501,73 @@ if (-not $SkipValidation) {
     Assert-Check -Name "Defender ProgramData" -Pass (-not (Test-Path "$MountDir\ProgramData\Microsoft\Windows Defender")) -Detail "Deleted"
     Assert-Check -Name "Defender Drivers (wd)" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\wd")) -Detail "Deleted"
 
+    # 7-10. SmartScreen & BrowserCore Binaries / Folders Deleted
+    Assert-Check -Name "SmartScreen smartscreen.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\smartscreen.exe")) -Detail "Deleted"
+    Assert-Check -Name "SmartScreen smartscreen.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\smartscreen.dll")) -Detail "Deleted"
+    $appRepRemaining = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "Microsoft.Windows.AppRep.ChxApp_*" -Directory -ErrorAction SilentlyContinue
+    Assert-Check -Name "SmartScreen AppRep.ChxApp" -Pass ($appRepRemaining.Count -eq 0) -Detail "Purged from SystemApps"
+    Assert-Check -Name "BrowserCore Directory" -Pass (-not (Test-Path "$MountDir\Windows\BrowserCore")) -Detail "Purged from Windows"
+
     # Re-load hives for registry assertions
     cmd /c "reg load HKLM\OFFLINE_SYSTEM `"$sysHive`" >nul 2>&1"
     cmd /c "reg load HKLM\OFFLINE_SOFTWARE `"$sofHive`" >nul 2>&1"
     cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
 
     try {
-        # 7-15. ALL 9 Defender Services Deleted
+        # 11-19. ALL 9 Defender Services Deleted
         foreach ($svc in $defenderServices) {
             $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
             Assert-Check -Name "Defender Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
         }
 
-        # 16-18. Telemetry Services Deleted
+        # 20-22. Telemetry Services Deleted
         foreach ($svc in $telemetryServices) {
             $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
             Assert-Check -Name "Telemetry Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
         }
 
-        # 19-21. Telemetry DLLs Deleted
+        # 23-25. Telemetry DLLs Deleted
         Assert-Check -Name "Telemetry diagtrack.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\diagtrack.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry moshost.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\moshost.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry PhoneService.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\PhoneService.dll")) -Detail "Deleted"
 
-        # 22. PlugPlay Service Disabled
+        # 26. PlugPlay Service Disabled
         $ppVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\PlugPlay`" /v Start 2>nul"
         Assert-Check -Name "PlugPlay Start=4" -Pass ($ppVal -match '0x4') -Detail "Disabled"
 
-        # 23. Spooler Service Manual
+        # 27. Spooler Service Manual
         $spVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\Spooler`" /v Start 2>nul"
         Assert-Check -Name "Spooler Start=3" -Pass ($spVal -match '0x3') -Detail "Manual"
 
-        # 24. lfsvc Disabled
+        # 28. lfsvc Disabled
         $lfVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\lfsvc`" /v Start 2>nul"
         Assert-Check -Name "lfsvc Start=4" -Pass ($lfVal -match '0x4') -Detail "Disabled"
 
-        # 25. RemoteRegistry Disabled
+        # 29. RemoteRegistry Disabled
         $rrVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\RemoteRegistry`" /v Start 2>nul"
         Assert-Check -Name "RemoteRegistry Start=4" -Pass ($rrVal -match '0x4') -Detail "Disabled"
 
-        # 26. DPS Disabled
+        # 30. DPS Disabled
         $dpsVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\DPS`" /v Start 2>nul"
         Assert-Check -Name "DPS Start=4" -Pass ($dpsVal -match '0x4') -Detail "Disabled"
 
-        # 27. ConfigureChatAutoInstall
+        # 31. ConfigureChatAutoInstall
         $chatVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Communications`" /v ConfigureChatAutoInstall 2>nul"
         Assert-Check -Name "ConfigureChatAutoInstall=0" -Pass ($chatVal -match '0x0') -Detail "Applied"
 
-        # 28. Preserved HttpAcceptLanguageOptOut
+        # 32. SmartScreenEnabled=off in Explorer
+        $ssVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer`" /v SmartScreenEnabled 2>nul"
+        Assert-Check -Name "SmartScreenEnabled=off" -Pass ($ssVal -match 'off') -Detail "Disabled in Explorer"
+
+        # 33. EnableSmartScreen=0 in System Policies
+        $essVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v EnableSmartScreen 2>nul"
+        Assert-Check -Name "EnableSmartScreen=0" -Pass ($essVal -match '0x0') -Detail "Disabled in System Policies"
+
+        # 34. BrowserCore Registrations Purged
+        $bcVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore`" 2>nul"
+        Assert-Check -Name "BrowserCore Chrome Registration" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from NativeMessagingHosts"
+
+        # 35. Preserved HttpAcceptLanguageOptOut
         $langVal1 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Control Panel\International\User Profile`" /v HttpAcceptLanguageOptOut 2>nul"
         $langVal2 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Software\Microsoft\Windows\CurrentVersion\RunOnce`" /v `"Telemetry Language Disable`" 2>nul"
         $langVal3 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut 2>nul"
@@ -512,21 +581,21 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 29. Region Policy In-Place Patch
+    # 36. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 30. OEMDefaultAssociations.xml
+    # 37. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 31. Notepad.lnk
+    # 38. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 32. SetupComplete.cmd Exists
+    # 39. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 33. SetupComplete.cmd Has Self-Delete
+    # 40. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
@@ -535,6 +604,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 33/33 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 40/40 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }

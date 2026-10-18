@@ -1064,3 +1064,23 @@ Windows Registry Editor Version 5.00
 "Variant"=dword:00000000
 "VariantPayload"=dword:00000000
 "VariantPayloadKind"=dword:00000000
+
+
+; Disable Windows Defender SmartScreen (File Explorer & System Policies)
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer]
+"SmartScreenEnabled"="off"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System]
+"EnableSmartScreen"=dword:00000000
+
+
+; Remove BrowserCore Native Messaging registrations
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.microsoft.browsercore]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Mozilla\NativeMessagingHosts\com.microsoft.browsercore]
+
+
