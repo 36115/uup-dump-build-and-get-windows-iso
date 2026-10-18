@@ -558,8 +558,22 @@ function Get-WindowsIso($name, $destinationDirectory) {
       throw "cdimage.exe could not be found to build the ISO."
     }
 
-    $createdIsoPath = "$buildDirectory\$title.ISO"
-    $dvdLabel = ($title -replace '[^A-Za-z0-9_]','_')
+    $finalIsoName = if ($debloat) {
+      $osPrefix = if ($name -match '^windows-10') { 'Win10' } else { 'Win11' }
+      $ednShort = switch -Exact ($edition.ToLower()) {
+        "homesinglelanguage" { "HomeSL" }
+        "home"               { "Home" }
+        "pro"                { "Pro" }
+        "multi"              { "Multi" }
+        default              { $edition }
+      }
+      "$osPrefix-$ednShort-$verbuild-Lite-$($iso.build)"
+    } else {
+      $title
+    }
+
+    $createdIsoPath = "$buildDirectory\$finalIsoName.iso"
+    $dvdLabel = ($finalIsoName -replace '[^A-Za-z0-9_]','_')
     if ($dvdLabel.Length -gt 32) { $dvdLabel = $dvdLabel.Substring(0, 32) }
     Write-CleanLine "Packaging final ISO with cdimage: $createdIsoPath (Label: $dvdLabel)..."
     
