@@ -1,4 +1,4 @@
-name: Build Windows
+﻿name: Build Windows
 run-name: >
   ${{ inputs.versions }}
   ${{ fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI","HomeSingleLanguage":"HOMESL","Enterprise":"ENTERPRISE","Education":"EDUCATION","ProfessionalWorkstation":"PROWORKSTATION","ProfessionalEducation":"PROEDUCATION","IoTEnterprise":"IOTENTERPRISE","IoTEnterpriseK":"IOTENTERPRISEK","ServerRdsh":"SERVERRDSH"}')[inputs.edition] || inputs.edition }}
@@ -7,7 +7,7 @@ run-name: >
     "Arabic (Saudi Arabia)":"AR","Bulgarian (Bulgaria)":"BG","Czech (Czech Republic)":"CS","Danish (Denmark)":"DA","German (Germany)":"DE","Greek (Greece)":"EL",
     "English (United Kingdom)":"EN","English (United States)":"EN","Spanish (Spain)":"ES","Spanish (Mexico)":"ES","Estonian (Estonia)":"ET","Finnish (Finland)":"FI",
     "French (Canada)":"FR","French (France)":"FR","Hebrew (Israel)":"HE","Croatian (Croatia)":"HR","Hungarian (Hungary)":"HU","Italian (Italy)":"IT",
-    "Japanese (Japan)":"JA","Korean (Korea)":"KO","Lithuanian (Lithuania)":"LT","Latvian (Latvia)":"LV","Norwegian Bokmål (Norway)":"NB",
+    "Japanese (Japan)":"JA","Korean (Korea)":"KO","Lithuanian (Lithuania)":"LT","Latvian (Latvia)":"LV","Norwegian Bokm├Ñl (Norway)":"NB",
     "Dutch (Netherlands)":"NL","Polish (Poland)":"PL","Portuguese (Brazil)":"PT","Portuguese (Portugal)":"PT","Romanian (Romania)":"RO","Russian (Russia)":"RU",
     "Slovak (Slovakia)":"SK","Slovenian (Slovenia)":"SL","Serbian (Latin, Serbia)":"SR","Swedish (Sweden)":"SV","Thai (Thailand)":"TH","Turkish (Turkey)":"TR",
     "Ukrainian (Ukraine)":"UK","Chinese (Simplified, China)":"ZH","Chinese (Traditional, Taiwan)":"ZH"
@@ -15,6 +15,7 @@ run-name: >
   ${{ inputs.esd && 'ESD' || '' }}
   ${{ inputs.drivers && 'DRIVERS' || '' }}
   ${{ inputs.netfx3 && 'NETFX3' || '' }}
+  ${{ inputs.profile_name && inputs.profile_name || '' }}
 
 on:
   workflow_dispatch:
@@ -85,7 +86,7 @@ on:
           - Korean (Korea)
           - Lithuanian (Lithuania)
           - Latvian (Latvia)
-          - Norwegian Bokmål (Norway)
+          - Norwegian Bokm├Ñl (Norway)
           - Dutch (Netherlands)
           - Polish (Poland)
           - Portuguese (Brazil)
@@ -119,6 +120,11 @@ on:
         default: false
       drivers:
         description: "Add additional drivers (only for x64)"
+        type: boolean
+        required: true
+        default: false
+      debloat:
+        description: "Apply Debloat Scripts"
         type: boolean
         required: true
         default: false
@@ -162,7 +168,7 @@ jobs:
             'Korean (Korea)'='ko-kr'
             'Lithuanian (Lithuania)'='lt-lt'
             'Latvian (Latvia)'='lv-lv'
-            'Norwegian Bokmål (Norway)'='nb-no'
+            'Norwegian Bokm├Ñl (Norway)'='nb-no'
             'Dutch (Netherlands)'='nl-nl'
             'Polish (Poland)'='pl-pl'
             'Portuguese (Brazil)'='pt-br'
@@ -203,6 +209,9 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
+            $opts += ' -profileName "${{ inputs.profile_name }}"'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.revision }}')) {
             $opts += ' -revision "${{ inputs.revision }}"'
           }
@@ -213,6 +222,13 @@ jobs:
           if ($opts) {
             echo "options=$opts"   >> $env:GITHUB_OUTPUT
           }
+
+      - name: Configure Runner Defender Exclusions
+        shell: pwsh
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          $outDir = Join-Path (Get-Location) "Out"
+          Add-MpPreference -ExclusionPath $env:TEMP, $outDir, "C:\a", "D:\a" -ErrorAction SilentlyContinue
 
       - name: Setup Environment
         shell: pwsh
