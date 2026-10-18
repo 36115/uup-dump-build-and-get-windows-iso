@@ -1,7 +1,7 @@
 name: Build Windows
 run-name: >
   ${{ inputs.versions }}
-  ${{ fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI"}')[inputs.edition] }}
+  ${{ fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI","HomeSingleLanguage":"HOMESL"}')[inputs.edition] }}
   ${{ fromJSON('{"x64":"X64","arm64":"ARM64"}')[inputs.architecture] }}
   ${{ fromJSON('{
     "Arabic (Saudi Arabia)":"AR","Bulgarian (Bulgaria)":"BG","Czech (Czech Republic)":"CS","Danish (Denmark)":"DA","German (Germany)":"DE","Greek (Greece)":"EL",
@@ -15,6 +15,7 @@ run-name: >
   ${{ inputs.esd && 'ESD' || '' }}
   ${{ inputs.drivers && 'DRIVERS' || '' }}
   ${{ inputs.netfx3 && 'NETFX3' || '' }}
+  ${{ inputs.debloat && 'DEBLOAT' || '' }}
 
 on:
   workflow_dispatch:
@@ -45,8 +46,8 @@ on:
       edition:
         description: "Windows edition to build"
         type: choice
-        options: [Pro, Home, Multi]
-        default: Pro
+        options: [Pro, Home, Multi, HomeSingleLanguage]
+        default: HomeSingleLanguage
         required: true
       language:
         description: "Language"
@@ -111,6 +112,11 @@ on:
         type: boolean
         required: true
         default: false
+      debloat:
+        description: "Apply Ultimate Debloat (No Defender, No Telemetry, Tweaks)"
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: write
@@ -122,6 +128,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
+          lfs: true
           persist-credentials: false
 
       - name: Map inputs
@@ -192,6 +199,7 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if ('${{ inputs.debloat }}' -eq 'true') { $opts += ' -debloat' }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.revision }}')) {
             $opts += ' -revision "${{ inputs.revision }}"'
           }
