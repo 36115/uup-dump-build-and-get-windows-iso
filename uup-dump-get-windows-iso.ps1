@@ -4,12 +4,14 @@ param(
   [string]$windowsTargetName,
   [string]$destinationDirectory = 'output',
   [ValidateSet("x64", "arm64")] [string]$architecture = "x64",
-  [ValidateSet("pro", "core", "multi", "home")] [string]$edition = "pro",
+  [ValidateSet("pro", "core", "multi", "home", "homesinglelanguage")] [string]$edition = "pro",
   [ValidateSet("nb-no", "fr-ca", "fi-fi", "lv-lv", "es-es", "en-gb", "zh-tw", "th-th", "sv-se", "en-us", "es-mx", "bg-bg", "hr-hr", "pt-br", "el-gr", "cs-cz", "it-it", "sk-sk", "pl-pl", "sl-si", "neutral", "ja-jp", "et-ee", "ro-ro", "fr-fr", "pt-pt", "ar-sa", "lt-lt", "hu-hu", "da-dk", "zh-cn", "uk-ua", "tr-tr", "ru-ru", "nl-nl", "he-il", "ko-kr", "sr-latn-rs", "de-de")]
   [string]$lang = "en-us",
   [switch]$esd,
   [switch]$drivers,
   [switch]$netfx3,
+  [switch]$debloat,
+  [string]$base7zPath,
   [string]$revision
 )
 
@@ -108,6 +110,7 @@ function Get-EditionName($e) {
   switch ($e.ToLower()) {
     "core"  { "Core" }
     "home"  { "Core" }
+    "homesinglelanguage" { "Core" }
     "multi" { "Multi" }
     default { "Professional" }
   }
@@ -328,9 +331,10 @@ function Get-WindowsIso($name, $destinationDirectory) {
   $iso = Get-UupDumpIso $name $TARGETS.$name
   if (-not $iso) { throw "Can't find UUP for $name ($($TARGETS.$name.search)), lang=$lang." }
 
-  $isoHasEdition    = $iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition
-  $hasVirtualMember = $iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition
-  $effectiveEdition = if ($isoHasEdition) { $iso.edition } else { $TARGETS.$name.edition }
+  $isHomeSingleLang = ($edition.ToLower() -eq "homesinglelanguage")
+  $hasVirtualMember = ($iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition) -or $isHomeSingleLang
+  $virtualEdn = if ($iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition) { $iso.virtualEdition } elseif ($isHomeSingleLang) { "CoreSingleLanguage" } else { $null }
+  $effectiveEdition = if ($hasVirtualMember) { $virtualEdn } elseif ($iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition) { $iso.edition } else { $TARGETS.$name.edition }
 
   if (!$preview) {
     if ($iso.title -match 'version') {
@@ -353,12 +357,12 @@ function Get-WindowsIso($name, $destinationDirectory) {
   if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
   New-Item -ItemType Directory -Force $buildDirectory | Out-Null
 
-  $edn = if ($hasVirtualMember) { $iso.virtualEdition } else { $effectiveEdition }
+  $edn = if ($hasVirtualMember) { $virtualEdn } else { $effectiveEdition }
   Write-CleanLine $edn
   $title = "$name $edn $($iso.build)"
 
   Write-CleanLine "Downloading the UUP dump download package for $title from $($iso.downloadPackageUrl)"
-  $downloadPackageBody = if ($hasVirtualMember) { @{ autodl=3; updates=1; cleanup=1; 'virtualEditions[]'=$iso.virtualEdition } } else { @{ autodl=2; updates=1; cleanup=1 } }
+  $downloadPackageBody = if ($hasVirtualMember) { @{ autodl=3; updates=1; cleanup=1; 'virtualEditions[]'=$virtualEdn } } else { @{ autodl=2; updates=1; cleanup=1 } }
   Invoke-WebRequest -Method Post -Uri $iso.downloadPackageUrl -Body $downloadPackageBody -OutFile "$buildDirectory.zip" | Out-Null
   Expand-Archive "$buildDirectory.zip" $buildDirectory
 
@@ -368,7 +372,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     -replace '^(Cleanup\s*)=.*','$1=1'
 
   $tag = ""
-  if ($esd) { $convertConfig = $convertConfig -replace '^(wim2esd\s*)=.*', '$1=1'; $tag += ".E" }
+  if ($esd -and -not $debloat) { $convertConfig = $convertConfig -replace '^(wim2esd\s*)=.*', '$1=1'; $tag += ".E" }
   if ($drivers -and $arch -ne "arm64") {
     $convertConfig = $convertConfig -replace '^(AddDrivers\s*)=.*', '$1=1'
     $tag += ".D"
@@ -380,7 +384,31 @@ function Get-WindowsIso($name, $destinationDirectory) {
     $convertConfig = $convertConfig `
       -replace '^(StartVirtual\s*)=.*','$1=1' `
       -replace '^(vDeleteSource\s*)=.*','$1=1' `
-      -replace '^(vAutoEditions\s*)=.*',"`$1=$($iso.virtualEdition)"
+      -replace '^(vAutoEditions\s*)=.*',"`$1=$virtualEdn"
+  }
+  if ($debloat) {
+    $convertConfig = $convertConfig `
+      -replace '^(wim2esd\s*)=.*', '$1=0' `
+      -replace '^(vwim2esd\s*)=.*', '$1=0' `
+      -replace '^(SkipISO\s*)=.*', '$1=1' `
+      -replace '^(vSkipISO\s*)=.*', '$1=1' `
+      -replace '^(SkipEdge\s*)=.*', '$1=2' `
+      -replace '^(SkipWinRE\s*)=.*', '$1=0' `
+      -replace '^(CustomList\s*)=.*', '$1=1' `
+      -replace '^(vDeleteSource\s*)=.*', '$1=1'
+    if ($esd) { $tag += ".E" }
+    $tag += ".Debloat"
+
+    $customAppsPath = Join-Path $buildDirectory "CustomAppsList.txt"
+    if (Test-Path $customAppsPath) {
+      $calContent = Get-Content $customAppsPath -Raw
+      # Comment out SecHealthUI (remove Defender app)
+      $calContent = [regex]::Replace($calContent, '(?m)^\s*Microsoft\.SecHealthUI', '# Microsoft.SecHealthUI')
+      # Uncomment XboxIdentityProvider (keep Xbox sign-in functional)
+      $calContent = [regex]::Replace($calContent, '(?m)^\s*#\s*(Microsoft\.XboxIdentityProvider.*)', '$1')
+      Set-Content -Path $customAppsPath -Value $calContent -Encoding UTF8
+      Write-CleanLine "Configured CustomAppsList.txt (SecHealthUI removed, XboxIdentityProvider retained)"
+    }
   }
   Set-Content -Encoding ascii -Path $buildDirectory/ConvertConfig.ini -Value $convertConfig
 
@@ -423,6 +451,129 @@ function Get-WindowsIso($name, $destinationDirectory) {
   }
 
   Pop-Location
+
+  if ($debloat) {
+    Write-CleanLine "Locating distribution folder for offline servicing..."
+    $distDir = Get-ChildItem -Path $buildDirectory -Directory | Where-Object { 
+      (Test-Path (Join-Path $_.FullName "sources\install.wim")) -or (Test-Path (Join-Path $_.FullName "sources\install.esd"))
+    } | Select-Object -First 1 -ExpandProperty FullName
+
+    if (-not $distDir) {
+      if (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.wim")) {
+        $distDir = Join-Path $buildDirectory "ISOFOLDER"
+      } else {
+        throw "Could not locate distribution folder with sources\install.wim in $buildDirectory"
+      }
+    }
+    Write-CleanLine "Distribution folder located: $distDir"
+
+    $installWim = Join-Path $distDir "sources\install.wim"
+    if (-not (Test-Path $installWim)) {
+      $installEsd = Join-Path $distDir "sources\install.esd"
+      if (Test-Path $installEsd) {
+        Write-CleanLine "Exporting install.esd to install.wim for servicing..."
+        & dism.exe /Export-Image /SourceImageFile:$installEsd /SourceIndex:1 /DestinationImageFile:$installWim
+        Remove-Item $installEsd -Force
+      } else {
+        throw "Neither install.wim nor install.esd found in $distDir\sources"
+      }
+    }
+
+    $mountDir = Join-Path $env:TEMP "Mount_Debloat_$([System.IO.Path]::GetRandomFileName())"
+    New-Item -ItemType Directory -Path $mountDir -Force | Out-Null
+    Write-CleanLine "Mounting $installWim index 1 to $mountDir..."
+    & dism.exe /Mount-Wim /WimFile:$installWim /Index:1 /MountDir:$mountDir
+    if ($LASTEXITCODE -ne 0) { throw "dism /Mount-Wim failed with exit code $LASTEXITCODE" }
+
+    try {
+      $debloatScript = Join-Path $PSScriptRoot "Utils\Debloat\Invoke-Debloat.ps1"
+      $regPack = Join-Path $PSScriptRoot "Utils\Debloat\Windows-11-REG-Pack-(NoDefender).reg"
+      if (-not (Test-Path $regPack)) {
+        $regPack = Join-Path $PSScriptRoot "UUPDump Debloat\Windows-11-REG-Pack-(NoDefender).reg"
+      }
+      $nsudo = Join-Path $PSScriptRoot "Utils\NSudo\x64\NSudoLC.exe"
+
+      Write-CleanLine "Running Invoke-Debloat.ps1 against mounted image..."
+      & powershell -ExecutionPolicy Bypass -File $debloatScript `
+          -MountDir $mountDir `
+          -RegPackPath $regPack `
+          -NSudoPath $nsudo
+      if ($LASTEXITCODE -ne 0) { throw "Invoke-Debloat.ps1 failed with exit code $LASTEXITCODE" }
+
+      Write-CleanLine "Unmounting and committing image at $mountDir..."
+      & dism.exe /Unmount-Wim /MountDir:$mountDir /Commit
+      if ($LASTEXITCODE -ne 0) { throw "dism /Unmount-Wim /Commit failed with exit code $LASTEXITCODE" }
+    }
+    finally {
+      if (Test-Path $mountDir) {
+        & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard 2>$null
+        Remove-Item $mountDir -Force -Recurse -ErrorAction SilentlyContinue
+      }
+    }
+
+    # If ESD was requested
+    if ($esd) {
+      Write-CleanLine "Converting install.wim to install.esd..."
+      $installEsd = Join-Path $distDir "sources\install.esd"
+      & dism.exe /Export-Image /SourceImageFile:$installWim /SourceIndex:1 /DestinationImageFile:$installEsd /Compress:recovery
+      Remove-Item $installWim -Force
+    }
+
+    # Check for custom base media (base.7z)
+    $finalMediaDir = $distDir
+    $resolvedBase7z = if ($base7zPath -and (Test-Path $base7zPath)) { 
+      $base7zPath 
+    } elseif (Test-Path "E:\ISO\Win11-HomeSL-25H2-Lite-26200.7921\base.7z") { 
+      "E:\ISO\Win11-HomeSL-25H2-Lite-26200.7921\base.7z" 
+    } elseif (Test-Path (Join-Path $PSScriptRoot "base.7z")) { 
+      Join-Path $PSScriptRoot "base.7z" 
+    } else { 
+      $null 
+    }
+
+    if ($resolvedBase7z) {
+      Write-CleanLine "Integrating custom base media from $resolvedBase7z..."
+      $baseExtractDir = Join-Path $buildDirectory "BaseMedia"
+      New-Item -ItemType Directory -Path $baseExtractDir -Force | Out-Null
+      & 7z x $resolvedBase7z -o"$baseExtractDir" -y | Out-Null
+      if (-not (Test-Path "$baseExtractDir\sources")) { New-Item -ItemType Directory -Path "$baseExtractDir\sources" -Force | Out-Null }
+      if ($esd) {
+        Copy-Item -Path (Join-Path $distDir "sources\install.esd") -Destination "$baseExtractDir\sources\install.esd" -Force
+      } else {
+        Copy-Item -Path (Join-Path $distDir "sources\install.wim") -Destination "$baseExtractDir\sources\install.wim" -Force
+      }
+      $finalMediaDir = $baseExtractDir
+      Write-CleanLine "Base media integration complete. Using $finalMediaDir for ISO creation."
+    }
+
+    # Build ISO with cdimage.exe
+    $cdimageExe = Join-Path $buildDirectory "bin\cdimage.exe"
+    if (-not (Test-Path $cdimageExe)) {
+      $cdimageExe = (Get-ChildItem -Path $buildDirectory -Filter "cdimage.exe" -Recurse | Select-Object -First 1).FullName
+    }
+    if (-not $cdimageExe) {
+      $cdimageExe = (Get-Command cdimage.exe -ErrorAction SilentlyContinue).Source
+    }
+    if (-not $cdimageExe) {
+      throw "cdimage.exe could not be found to build the ISO."
+    }
+
+    $createdIsoPath = "$buildDirectory\$title.ISO"
+    $dvdLabel = ($title -replace '[^A-Za-z0-9_]','_')
+    if ($dvdLabel.Length -gt 32) { $dvdLabel = $dvdLabel.Substring(0, 32) }
+    Write-CleanLine "Packaging final ISO with cdimage: $createdIsoPath (Label: $dvdLabel)..."
+    
+    $bootEtfs = Join-Path $finalMediaDir "boot\etfsboot.com"
+    $bootEfi  = Join-Path $finalMediaDir "efi\Microsoft\boot\efisys.bin"
+    
+    if ($architecture -ne "arm64" -and (Test-Path $bootEtfs)) {
+      & $cdimageExe "-bootdata:2#p0,e,b`"$bootEtfs`"#pEF,e,b`"$bootEfi`"" -o -m -u2 -udfver102 -l$dvdLabel $finalMediaDir $createdIsoPath
+    } else {
+      & $cdimageExe "-bootdata:1#pEF,e,b`"$bootEfi`"" -o -m -u2 -udfver102 -l$dvdLabel $finalMediaDir $createdIsoPath
+    }
+    if ($LASTEXITCODE -ne 0) { throw "cdimage.exe failed with exit code $LASTEXITCODE" }
+    Write-CleanLine "ISO generated successfully: $createdIsoPath"
+  }
 
   $sourceIsoPath = Resolve-Path $buildDirectory/*.iso
   $IsoName = Split-Path $sourceIsoPath -leaf
