@@ -1,0 +1,1066 @@
+Windows Registry Editor Version 5.00
+
+; Take Full Ownership of Files & Folders
+
+[HKEY_CLASSES_ROOT\*\shell\runas]
+@="Take Ownership"
+"NoWorkingDirectory"=""
+
+[HKEY_CLASSES_ROOT\*\shell\runas\command]
+@="cmd.exe /c takeown /f \"%1\" && icacls \"%1\" /grant administrators:F"
+"IsolatedCommand"="cmd.exe /c takeown /f \"%1\" && icacls \"%1\" /grant administrators:F"
+
+[HKEY_CLASSES_ROOT\Directory\shell\runas]
+@="Take Ownership"
+"NoWorkingDirectory"=""
+
+[HKEY_CLASSES_ROOT\Directory\shell\runas\command]
+@="cmd.exe /c takeown /f \"%1\" /r /d y && icacls \"%1\" /grant administrators:F /t"
+"IsolatedCommand"="cmd.exe /c takeown /f \"%1\" /r /d y && icacls \"%1\" /grant administrators:F /t"
+
+
+; Disable Shortcut Text
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer]
+"link"=hex:00,00,00,00
+
+
+; Disable Automatic Install DevHome and Outlook (Windows 11)
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\DevHomeUpdate]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\OutlookUpdate]
+
+
+; Disable Blur Effect On Sign-in Sceen Background
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System]
+"DisableAcrylicBackgroundOnLogon"=dword:00000001
+
+
+; Disable Meet Now Icon
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies]
+"HideSCAMeetNow"=dword:00000001
+
+
+; Disable Prefetch
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters]
+"EnablePrefetchers"=dword:00000000
+
+; Disable First Logon Animation
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System]
+"EnableFirstLogonAnimation"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon]
+"EnableFirstLogonAnimation"=dword:00000000
+
+
+; Disable VBS (Windows 11)
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard]
+"EnableVirtualizationBasedSecurity"=dword:00000000
+
+
+; Remove Chat (Windows 11)
+
+; Disable Chat Taskbar Settings
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Chat]
+"ChatIcon"=dword:00000003
+
+; Disable Taskbar Chat
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"TaskbarMn"=dword:00000000
+
+
+; Disable Widget (Windows 11) - Not Work Anymore on 25H2
+
+;[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+;"TaskbarDa"=dword:00000000
+
+
+; Enable Windows Photo Viewer
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Photo Viewer\Capabilities\FileAssociations]
+
+".bmp"="PhotoViewer.FileAssoc.Tiff"
+".dib"="PhotoViewer.FileAssoc.Tiff"
+".gif"="PhotoViewer.FileAssoc.Tiff"
+".jfif"="PhotoViewer.FileAssoc.Tiff"
+".jpe"="PhotoViewer.FileAssoc.Tiff"
+".jpeg"="PhotoViewer.FileAssoc.Tiff"
+".jpg"="PhotoViewer.FileAssoc.Tiff"
+".jxr"="PhotoViewer.FileAssoc.Tiff"
+".png"="PhotoViewer.FileAssoc.Tiff"
+
+
+; Hide Control Pannel Page (Windows 11)
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"DisallowCPL"=dword:00000001
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowCPL]
+"1"="Phone and Modem"
+"2"="Work Folders"
+"3"="Device Encryption"
+"4"="Ease of Access Center"
+"5"="Backup and Restore (Windows 7)"
+"6"="File Explorer Options"
+"7"="Storage Spaces"
+"8"="RemoteApp and Desktop Connections"
+"9"="Security and Maintenance"
+"10"="Sync Center"
+"11"="Taskbar and Navigation"
+"12"="File History"
+"13"="Speech Recognition"
+
+
+; Hide Windows Insider Program page
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsSelfHost\UI\Visibility]
+"HideInsiderPage"=dword:00000001
+
+
+; Hide Windows Settings Page (Non-Defender)
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"SettingsPageVisibility"="hide:windowsdefender;deviceencryption;mobile-devices;gaming-gamebar;gaming-gamedvr;gaming-broadcasting;gaming-gamemode;gaming-xboxnetworking;gaming-trueplay;findmydevice;maps;videoplayback;appsforwebsites;home;remotedesktop;aicomponents;troubleshoot"
+
+
+; Open File Explorer to This PC
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"LaunchTo"=dword:00000001
+
+
+; Show Hidden Files, Folders, and Drives
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Hidden"=dword:00000001
+
+
+; Disable Windows Ads
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"OemPreInstalledAppsEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"PreInstalledAppsEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"PreInstalledAppsEverEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SilentInstalledAppsEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"ContentDeliveryAllowed"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"FeatureManagementEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SystemPaneSuggestionsEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SoftLandingEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"RotatingLockScreenEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"RotatingLockScreenOverlayEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SubscribedContentEnabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SubscribedContent-310093Enabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SubscribedContent-338388Enabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SubscribedContent-338389Enabled"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"ShowSyncProviderNotifications"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent]
+"DisableWindowsConsumerFeatures"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent]
+"DisableConsumerAccountStateContent"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent]
+"DisableCloudOptimizedContent"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection]
+"AllowTelemetry"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection]
+"AllowTelemetry"=dword:00000000
+
+[-HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager\Subscriptions]
+
+[-HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager\SuggestedApps]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{645AE3F4-2ABB-4B23-BBCC-8501D777B798}]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{0600DD45-FAF2-4131-A006-0B17509B9F78}]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{06072E1C-3683-48EE-8E72-50DE49C06063}]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{94F0188E-205B-417F-BFF5-B1F6E35F8B9B}]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{F87BAE91-2470-40AB-9F94-A437578A5E4D}]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{6FAC31FA-4A85-4E64-BFD5-2154FF4594B3}]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{FC931F16-B50A-472E-B061-B6F79A71EF59}]
+
+
+; Custom Start Menu Pin (Windows 11)
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current\device]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current\device\Start]
+"ConfigureStartPins"="{\"pinnedList\":[{\"packagedAppId\":\"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel\"},{\"desktopAppId\":\"Microsoft.Windows.Explorer\"}]}"
+"ConfigureStartPins_ProviderSet"=dword:00000001
+"ConfigureStartPins_WinningProvider"="B5292708-1619-419B-9923-E5D9F3925E71"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71\default]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71\default\Device]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71\default\Device\Start]
+"ConfigureStartPins"="{\"pinnedList\":[{\"packagedAppId\":\"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel\"},{\"desktopAppId\":\"Microsoft.Windows.Explorer\"}]}"
+"ConfigureStartPins_LastWrite"=dword:00000001
+
+
+; Disable Xbox Game Bar
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR]
+"AppCaptureEnabled"=dword:00000000
+
+
+; Disable Most Used Apps List on Start Menu
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"NoStartMenuMFUprogramsList"=dword:00000001
+
+
+; Disable Recently Added Apps List on Start Menu
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer]
+"HideRecentlyAddedApps"=dword:00000001
+
+
+; Disable Store Activity History on This Device
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System]
+"PublishUserActivities"=dword:00000000
+
+
+; Disable App Look Up in Store
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer]
+"NoUseStoreOpenWith"=dword:00000001
+
+
+; Disable Bing Search
+
+[HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer]
+"DisableSearchBoxSuggestions"=dword:00000001
+
+
+; Disable Recent File
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_TrackDocs"=dword:00000000
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer]
+"ShowRecent"=dword:00000000
+
+
+; Hide Frequent Folders in Quick Access
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer]
+"ShowFrequent"=dword:00000000
+
+
+; Never Feedback Frequency
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Siuf\Rules]
+"NumberOfSIUFInPeriod"=dword:00000000
+"PeriodInNanoSeconds"=-
+
+
+; Turn off Allow Downloads from Other PCs
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Settings]
+"DownloadMode"=dword:00000000
+
+
+; Turn off App Launch Tracking for Current User
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_TrackProgs"=dword:00000000
+
+
+; Turn off Cloud Content Search for Microsoft Account
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_TrackProgs"=dword:00000000
+
+
+; Turn off Cloud Content Search for Work or School Account
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings]
+"IsAADCloudSearchEnabled"=dword:00000000
+
+
+; Turn off Improve Inking and Typing Recognition
+
+[HKEY_CURRENT_USER\Software\Microsoft\Input\TIPC]
+"Enabled"=dword:00000000
+
+
+; Turn off Personal Inking and Typing Dictionary
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CPSS\Store\InkingAndTypingPersonalization]
+"Value"=dword:00000000
+
+[HKEY_CURRENT_USER\Software\Microsoft\Personalization\Settings]
+"AcceptedPrivacyPolicy"=dword:00000000
+
+[HKEY_CURRENT_USER\Software\Microsoft\InputPersonalization]
+"RestrictImplicitInkCollection"=dword:00000001
+"RestrictImplicitTextCollection"=dword:00000001
+
+[HKEY_CURRENT_USER\Software\Microsoft\InputPersonalization\TrainedDataStore]
+"HarvestContacts"=dword:00000000
+
+
+; Turn off SafeSearch Filters
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\SearchSettings]
+"SafeSearchMode"=dword:00000000
+
+
+; Turn off Search History on This Device for Current User
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings]
+"IsDeviceSearchHistoryEnabled"=dword:00000000
+
+
+; Turn off Show Files from Office.com in File Explorer Home
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer]
+"ShowCloudFilesInQuickAccess"=dword:00000000
+
+
+; Turn off Show Recently Opened Items in Start Jump Lists File Explorer
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_TrackDocs"=dword:00000000
+
+
+; Turn off Show Recommendations for Tips Shortcuts New Apps and More on Start Menu
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_IrisRecommendations"=dword:00000000
+
+
+; Turn off Suggested Content in Settings
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager]
+"SubscribedContent-338393Enabled"=dword:00000000
+"SubscribedContent-353694Enabled"=dword:00000000
+"SubscribedContent-353696Enabled"=dword:00000000
+
+
+; Restore Legacy Notepad (Windows 11)
+
+; [HKEY_CLASSES_ROOT\*\shell\Edit]
+
+; [HKEY_CLASSES_ROOT\*\shell\Edit\command]
+; @="notepad.exe %1"
+
+; [HKEY_CLASSES_ROOT\Applications\notepad.exe]
+; "NoOpenWith"=-
+
+; [-HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\App Paths\notepad.exe]
+
+; [HKEY_CLASSES_ROOT\txtfilelegacy\DefaultIcon]
+; @="imageres.dll,-102"
+
+; [HKEY_CLASSES_ROOT\txtfilelegacy\shell\open\command]
+; @="C:\\Windows\\System32\\notepad.exe \"%1\""
+
+; [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\notepad.exe]
+; "UseFilter"=dword:00000000
+
+; Restore Legacy Notepad (Windows 11)
+
+; --- Fix Registry Deletions ---
+
+; Remove specific 'App Paths' entry for Notepad in Current User
+[-HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\App Paths\notepad.exe]
+
+; Remove 'NoOpenWith' value to allow Notepad to appear in Open With lists
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Applications\notepad.exe]
+"NoOpenWith"=-
+
+
+; --- File Associations and Context Menu Entries ---
+
+; Add Notepad to generic OpenWithList
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\*\OpenWithList\notepad.exe]
+
+; Add Notepad to .htm OpenWithList
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.htm\OpenWithList\notepad.exe]
+
+; Define File Types
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.inf]
+@="inffile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.ini]
+@="inifile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.log]
+@="txtfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.ps1]
+@="Microsoft.PowerShellScript.1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.psd1]
+@="Microsoft.PowerShellData.1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.psm1]
+@="Microsoft.PowerShellModule.1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.scp]
+@="txtfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.txt]
+@="txtfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.txt\ShellNew]
+"ItemName"="@%SystemRoot%\\system32\\notepad.exe,-470"
+"NullFile"=" "
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.wtx]
+@="txtfile"
+
+
+; --- Notepad Application Settings ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Applications\notepad.exe\shell\edit\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Applications\notepad.exe\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+
+; --- INF File Settings ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile]
+@="Setup Information"
+"FriendlyTypeName"="@%SystemRoot%\\System32\\setupapi.dll,-2000"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile\DefaultIcon]
+@="%SystemRoot%\\System32\\imageres.dll,-69"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+  00,25,00,31,00,00,00
+
+
+; --- INI File Settings ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile]
+@="Configuration Settings"
+"EditFlags"=dword:00200000
+"FriendlyTypeName"="@shell32.dll,-10151"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile\DefaultIcon]
+@="%SystemRoot%\\system32\\imageres.dll,-69"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+  00,25,00,31,00,00,00
+
+
+; --- PowerShell File Settings ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellData.1]
+"EditFlags"=dword:00020000
+"FriendlyTypeName"="@\"%systemroot%\\system32\\windowspowershell\\v1.0\\powershell.exe\",-104"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellData.1\Shell\Open\Command]
+@="\"C:\\Windows\\System32\\notepad.exe\" \"%1\""
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellModule.1]
+"EditFlags"=dword:00020000
+"FriendlyTypeName"="@\"%systemroot%\\system32\\windowspowershell\\v1.0\\powershell.exe\",-106"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellModule.1\Shell\Open\Command]
+@="\"C:\\Windows\\System32\\notepad.exe\" \"%1\""
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellScript.1]
+"EditFlags"=dword:00020000
+"FriendlyTypeName"="@\"%systemroot%\\system32\\windowspowershell\\v1.0\\powershell.exe\",-103"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellScript.1\DefaultIcon]
+@="\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell_ise.exe\",1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellScript.1\Shell\Open\Command]
+@="\"C:\\Windows\\System32\\notepad.exe\" \"%1\""
+
+
+; --- System File Associations ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\text\OpenWithList\Notepad.exe]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\text\shell\edit\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\text\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+
+; --- TxtFile Settings ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile]
+@="Text Document"
+"EditFlags"=dword:00210000
+"FriendlyTypeName"="@%SystemRoot%\\system32\\notepad.exe,-469"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\DefaultIcon]
+@="%SystemRoot%\\system32\\imageres.dll,-102"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+  00,25,00,31,00,00,00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\shell\printto\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,74,\
+  00,20,00,22,00,25,00,31,00,22,00,20,00,22,00,25,00,32,00,22,00,20,00,22,00,\
+  25,00,33,00,22,00,20,00,22,00,25,00,34,00,22,00,00,00
+
+
+; --- Notepad Capabilities and Registration ---
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Notepad\Capabilities]
+"ApplicationDescription"="@%SystemRoot%\\system32\\NOTEPAD.EXE,-9"
+"ApplicationName"="@%SystemRoot%\\system32\\NOTEPAD.EXE,-9"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Notepad\Capabilities\FileAssociations]
+".ini"="inifile"
+".log"="logfile"
+".scp"="scpfile"
+".txt"="txtfile"
+".wtx"="wtxfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\RegisteredApplications]
+"Notepad"="Software\\Microsoft\\Windows\\Notepad\\Capabilities"
+
+[HKEY_CURRENT_USER\Software\Microsoft\Notepad]
+"ShowStoreBanner"=dword:00000000
+
+
+; Turn off Location Service for Your Account and Apps
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location]
+"Value"="Deny"
+
+
+; Turn off Location for This Device
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location]
+"Value"="Deny"
+
+
+; Disable Windows for Install Driver
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata]
+"PreventDeviceMetadataFromNetwork"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate]
+"ExcludeWUDriversInQualityUpdate"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DriverSearching]
+"DriverUpdateWizardWuSearchEnabled"=dword:00000000
+
+
+; Add Change Owner to Context Menu
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner]
+"MUIVerb"="Change Owner"
+"Extended"=-
+"HasLUAShield"=""
+"SubCommands"=""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\01Owner]
+@="See Current Owner"
+"Icon"="imageres.dll,-1029"
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\01Owner\command]
+@="powershell -NoExit Get-ACL '%1'| Format-List -Property Owner"
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\Administrators]
+@="Change Owner to Administrators"
+"HasLUAShield"=""
+"CommandFlags"=dword:00000020
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\Administrators\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Administrators\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Administrators\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\Everyone]
+@="Change Owner to Everyone"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\Everyone\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Everyone\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Everyone\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\SYSTEM]
+@="Change Owner to SYSTEM"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\SYSTEM\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"SYSTEM\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"SYSTEM\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\TrustedInstaller]
+@="Change Owner to TrustedInstaller"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\*\shell\ChangeOwner\shell\TrustedInstaller\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"\"\"NT Service\\TrustedInstaller\"\"\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"\"\"NT Service\\TrustedInstaller\"\"\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner]
+"MUIVerb"="Change Owner"
+"AppliesTo"="NOT (System.ItemPathDisplay:=\"C:\\Users\" OR System.ItemPathDisplay:=\"C:\\ProgramData\" OR System.ItemPathDisplay:=\"C:\\Windows\" OR System.ItemPathDisplay:=\"C:\\Windows\\System32\" OR System.ItemPathDisplay:=\"C:\\Program Files\" OR System.ItemPathDisplay:=\"C:\\Program Files (x86)\")"
+"Extended"=-
+"HasLUAShield"=""
+"NoWorkingDirectory"=""
+"Position"="middle"
+"SubCommands"=""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\01Owner]
+@="See Current Owner"
+"Icon"="imageres.dll,-1029"
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\01Owner\command]
+@="powershell -NoExit Get-ACL '%1'| Format-List -Property Owner"
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\Administrators]
+@="Change Owner to Administrators"
+"HasLUAShield"=""
+"CommandFlags"=dword:00000020
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\Administrators\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Administrators\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Administrators\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\Everyone]
+@="Change Owner to Everyone"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\Everyone\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Everyone\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"Everyone\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\SYSTEM]
+@="Change Owner to SYSTEM"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\SYSTEM\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"SYSTEM\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"SYSTEM\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\TrustedInstaller]
+@="Change Owner to TrustedInstaller"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\Directory\shell\ChangeOwner\shell\TrustedInstaller\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"\"\"NT Service\\TrustedInstaller\"\"\" /t /c /l' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \\\"%1\\\" /setowner \"\"\"NT Service\\TrustedInstaller\"\"\" /t /c /l' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner]
+"MUIVerb"="Change Owner"
+"AppliesTo"="NOT (System.ItemPathDisplay:=\"C:\\\")"
+"Extended"=-
+"HasLUAShield"=""
+"NoWorkingDirectory"=""
+"Position"="middle"
+"SubCommands"=""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\01Owner]
+@="See Current Owner"
+"Icon"="imageres.dll,-1029"
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\01Owner\command]
+@="powershell -NoExit Get-ACL '%1'| Format-List -Property Owner"
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\Administrators]
+@="Change Owner to Administrators"
+"HasLUAShield"=""
+"CommandFlags"=dword:00000020
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\Administrators\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \"%1\\\" /setowner \"Administrators\" /c' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \"%1\\\" /setowner \"Administrators\" /c' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\Everyone]
+@="Change Owner to Everyone"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\Everyone\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/k icacls \"%1\\\" /setowner \"Everyone\" /c' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/k icacls \"%1\\\" /setowner \"Everyone\" /c' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\SYSTEM]
+@="Change Owner to SYSTEM"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\SYSTEM\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \"%1\\\" /setowner \"SYSTEM\" /c' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \"%1\\\" /setowner \"SYSTEM\" /c' -Verb runAs\""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\TrustedInstaller]
+@="Change Owner to TrustedInstaller"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\Drive\shell\ChangeOwner\shell\TrustedInstaller\command]
+@="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \"%1\\\" /setowner \"\"\"NT Service\\TrustedInstaller\"\"\" /c' -Verb runAs\""
+"IsolatedCommand"="powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/c icacls \"%1\\\" /setowner \"\"\"NT Service\\TrustedInstaller\"\"\" /c' -Verb runAs\""
+
+
+; Restore New Text Document Contex Menu Item
+
+[HKEY_CLASSES_ROOT\.txt\ShellNew]
+"ItemName"=hex(2):40,00,25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,\
+  6f,00,74,00,25,00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,\
+  00,6e,00,6f,00,74,00,65,00,70,00,61,00,64,00,2e,00,65,00,78,00,65,00,2c,00,\
+  2d,00,34,00,37,00,30,00,00,00
+"NullFile"=""
+
+[HKEY_CLASSES_ROOT\.txt]
+@="txtfile"
+"Content Type"="text/plain"
+"PerceivedType"="text"
+
+[HKEY_CLASSES_ROOT\.txt\PersistentHandler]
+@="{5e941d80-bf96-11cd-b579-08002b30bfeb}"
+
+[HKEY_CLASSES_ROOT\.txt\ShellNew]
+"ItemName"=hex(2):40,00,25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,\
+  6f,00,74,00,25,00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,\
+  00,6e,00,6f,00,74,00,65,00,70,00,61,00,64,00,2e,00,65,00,78,00,65,00,2c,00,\
+  2d,00,34,00,37,00,30,00,00,00
+"NullFile"=""
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.txt]
+"PerceivedType"="document"
+
+[HKEY_CLASSES_ROOT\txtfile]
+@="Text Document"
+"EditFlags"=dword:00210000
+"FriendlyTypeName"=hex(2):40,00,25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,\
+  00,6f,00,6f,00,74,00,25,00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,\
+  32,00,5c,00,6e,00,6f,00,74,00,65,00,70,00,61,00,64,00,2e,00,65,00,78,00,65,\
+  00,2c,00,2d,00,34,00,36,00,39,00,00,00
+
+[HKEY_CLASSES_ROOT\txtfile\DefaultIcon]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,69,00,6d,00,\
+  61,00,67,00,65,00,72,00,65,00,73,00,2e,00,64,00,6c,00,6c,00,2c,00,2d,00,31,\
+  00,30,00,32,00,00,00
+
+[HKEY_CLASSES_ROOT\txtfile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+  00
+
+[HKEY_CLASSES_ROOT\txtfile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+  54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+  00,25,00,31,00,00,00
+
+[HKEY_CLASSES_ROOT\txtfile\shell\printto\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+  00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,6e,00,6f,00,\
+  74,00,65,00,70,00,61,00,64,00,2e,00,65,00,78,00,65,00,20,00,2f,00,70,00,74,\
+  00,20,00,22,00,25,00,31,00,22,00,20,00,22,00,25,00,32,00,22,00,20,00,22,00,\
+  25,00,33,00,22,00,20,00,22,00,25,00,34,00,22,00,00,00
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.txt\OpenWithList]
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.txt\OpenWithProgids]
+"txtfile"=hex(0):
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.txt\UserChoice]
+"Hash"="hyXk/CpboWw="
+"ProgId"="txtfile"
+
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\Roaming\OpenWith\FileExts\.txt\UserChoice]
+"Hash"="FvJcqeZpmOE="
+"ProgId"="txtfile"
+
+
+; Disable Automatic Install Microsoft Teams on Windows 11
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Communications]
+"ConfigureChatAutoInstall"=dword:00000000
+
+
+; Turn off Allow Locaiton Override for Current User
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CPSS\Store\UserLocationOverridePrivacySetting]
+"Value"=dword:00000000
+
+
+; Add Install to Cab Context Menu
+
+[HKEY_CLASSES_ROOT\CABFolder\Shell\RunAs]
+@="Install"
+"HasLUAShield"=""
+
+[HKEY_CLASSES_ROOT\CABFolder\Shell\RunAs\Command]
+@="cmd /k dism /online /add-package /packagepath:\"%1\""
+
+
+; Bloxstrap use IE insted EdgeWebview
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}]
+
+
+; Show File Extensions
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"HideFileExt"=dword:00000000
+
+
+; Add System Icons from the Desktop
+
+; This PC
+
+[HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel]
+"{20D04FE0-3AEA-1069-A2D8-08002B30309D}"=dword:00000000
+
+; Control Panel
+
+[HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel]
+"{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}"=dword:00000000
+
+
+; Disable Forced Encryption/BitLocker (Windows 11)
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\BitLocker]
+"PreventDeviceEncryption"=dword:00000001
+
+
+; Disable Website Access of Language List
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnce]
+"Telemetry Language Disable"="cmd.exe /C \"REG ADD \"HKCU\Control Panel\International\User Profile\" /v HttpAcceptLanguageOptOut /t REG_DWORD /d 1 /f\""
+
+
+; Disable Start Menu and Taskbar Transparency
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize]
+"EnableTransparency"=dword:00000000
+
+
+; Turn off Cloud Content Search for Microsoft Account
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings]
+"IsMSACloudSearchEnabled"=dword:00000000
+
+
+; Disable Cloud Content Search for All Users
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search]
+"AllowCloudSearch"=dword:00000000
+
+
+; Bypass Windows 11 System Requirements
+
+[HKEY_CURRENT_USER\Control Panel\UnsupportedHardwareNotificationCache]
+"SV1"=dword:00000000
+"SV2"=dword:00000000
+
+[HKEY_USERS\.DEFAULT\Control Panel\UnsupportedHardwareNotificationCache]
+"SV1"=dword:00000000
+"SV2"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\Setup\LabConfig]
+"BypassCPUCheck"=dword:00000001
+"BypassRAMCheck"=dword:00000001
+"BypassSecureBootCheck"=dword:00000001
+"BypassStorageCheck"=dword:00000001
+"BypassBypassTPMCheck"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SYSTEM\Setup\MoSetup]
+"AllowUpgradesWithUnsupportedTPMOrCPU"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE]
+"BypassNRO"=dword:00000001
+
+
+; Disabling Reserved Storage
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager]
+"ShippedWithReserves"=dword:00000000
+
+
+; Disable OneDrive Folder Backup
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\OneDrive]
+"DisableFileSyncNGSC"=dword:00000001
+
+
+;Disable Resume App from Device and Continue
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CrossDeviceResume\Configuration]
+"IsResumeAllowed"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\default\Connectivity\DisableCrossDeviceResume]
+"value"=dword:00000001
+
+; 1694661260
+
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\FeatureManagement\Overrides\8\1387020943]
+"EnabledState"=dword:00000001
+"EnabledStateOptions"=dword:00000000
+"Variant"=dword:00000000
+"VariantPayload"=dword:00000000
+"VariantPayloadKind"=dword:00000000
+
+
+; Remove Home and Gallery from File Explorer in Windows 11
+
+; Home
+[HKEY_CURRENT_USER\Software\Classes\CLSID\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}]
+"System.IsPinnedToNameSpaceTree"=dword:00000000
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}]
+
+
+; Gallery
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}]
+
+
+; Set Recommended Troubleshooting to "Don't run any troubleshooters"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsMitigation]
+"UserPreference"=dword:00000001
+
+
+; Disable Show Me Notifications in Settings
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SystemSettings\AccountNotifications]
+"EnableAccountNotifications"=dword:00000000
+
+
+; Disabled Show Account-Related Notifications
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_AccountNotifications"=dword:00000000
+
+
+; Disabled Security and Maintenance Notifications
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\Windows.SystemToast.SecurityAndMaintenance]
+"Enabled"=dword:00000000
+
+
+; Disabled Windows Malicious Software Removal Tool from Windows Update
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MRT]
+"DontOfferThroughWUAU"=dword:00000001
+
+
+; Turn off Share Across Devices for App Experiences
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CDP]
+"CdpSessionUserAuthzPolicy"=dword:00000000
+"RomeSdkChannelUserAuthzPolicy"=dword:00000000
+
+
+; Disabled Automatic Folder Type Discovery
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnce]
+"Disable Folder Discovery"="cmd.exe /C \"REG ADD \"HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell\" /v FolderType /t REG_SZ /d NotSpecified /f\""
+
+;[-HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags]
+
+;[HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell]
+;"FolderType"="NotSpecified"
+
+
+; Disable EdgeWebView2 from Windows Search
+
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\FeatureManagement\Overrides\8\1694661260]
+"EnabledState"=dword:00000001
+"EnabledStateOptions"=dword:00000000
+"Variant"=dword:00000000
+"VariantPayload"=dword:00000000
+"VariantPayloadKind"=dword:00000000
