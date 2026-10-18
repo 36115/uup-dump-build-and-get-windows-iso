@@ -11,6 +11,7 @@ run-name: >
     "Slovak (Slovakia)":"sk-SK","Slovenian (Slovenia)":"sl-SI","Serbian (Latin, Serbia)":"sr-Latn-RS","Swedish (Sweden)":"sv-SE","Thai (Thailand)":"th-TH","Turkish (Turkey)":"tr-TR",
     "Ukrainian (Ukraine)":"uk-UA","Chinese (Simplified, China)":"zh-CN","Chinese (Traditional, Taiwan)":"zh-TW"
   }')[inputs.language] }})
+  ${{ inputs.profile_name && format('- {0}', inputs.profile_name) || '' }}
   ${{ inputs.esd && '[ESD]' || '' }}
   ${{ inputs.drivers && '[Drivers]' || '' }}
   ${{ inputs.netfx3 && '[NetFx3]' || '' }}
@@ -120,6 +121,11 @@ on:
         type: boolean
         required: true
         default: false
+      profile_name:
+        description: "Profile to apply (e.g. Debloat). Leave empty for Default"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -201,6 +207,9 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
+            $opts += ' -profileName "${{ inputs.profile_name }}"'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.revision }}')) {
             $opts += ' -revision "${{ inputs.revision }}"'
           }
