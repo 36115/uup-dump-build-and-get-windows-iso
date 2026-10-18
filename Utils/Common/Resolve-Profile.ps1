@@ -354,3 +354,37 @@ function Get-ProfileConvertConfig {
 
     return $merged
 }
+
+function Get-ProfileIsoTag {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
+        if ($cfg.ContainsKey('IsoTag') -and $cfg.IsoTag) {
+            return [string]$cfg.IsoTag
+        }
+    }
+    return ""
+}
+
+function Get-ProfileIsoNameFormat {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
+        if ($cfg -and $cfg.ContainsKey('IsoNameFormat') -and $cfg.IsoNameFormat) {
+            return [string]$cfg.IsoNameFormat
+        }
+    }
+    return ""
+}

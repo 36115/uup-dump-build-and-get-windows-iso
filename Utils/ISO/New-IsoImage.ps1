@@ -227,6 +227,60 @@ function Export-IsoMetadata {
     Set-Content -Encoding utf8 -Path $MetadataPath -Value $json
 }
 
+function Get-IsoName {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TargetName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EditionShort,
+
+        [Parameter(Mandatory = $true)]
+        [string]$VersionBuild,
+
+        [Parameter(Mandatory = $true)]
+        [string]$BuildNumber,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Tag = "Lite",
+
+        [Parameter(Mandatory = $false)]
+        [string]$TargetOS = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$Format = ""
+    )
+
+    $resolvedTarget = if ($TargetOS) {
+        $TargetOS
+    } elseif ($TargetName -match '(?i)win(dows)?[-_\s]?10') {
+        '10'
+    } else {
+        '11'
+    }
+    $osPrefix = "Win$resolvedTarget"
+    $tagPart = if ([string]::IsNullOrWhiteSpace($Tag)) { '' } else { "-$Tag" }
+
+    if ($Format) {
+        $res = $Format
+        $targetVal = if ($TargetName -and $TargetName -notmatch '[-_]') { $TargetName } else { $osPrefix }
+        $res = $res -replace '\{TargetName\}', $targetVal
+        $res = $res -replace '\{TargetOS\}', $resolvedTarget
+        $res = $res -replace '\{OsPrefix\}', $osPrefix
+        $res = $res -replace '\{Edition\}', $EditionShort
+        $res = $res -replace '\{EditionShort\}', $EditionShort
+        $res = $res -replace '\{Version\}', $VersionBuild
+        $res = $res -replace '\{VersionBuild\}', $VersionBuild
+        $res = $res -replace '\{Build\}', $BuildNumber
+        $res = $res -replace '\{BuildNumber\}', $BuildNumber
+        $res = $res -replace '\{Tag\}', $Tag
+        return $res
+    }
+
+    return "$osPrefix-$EditionShort-$VersionBuild$tagPart-$BuildNumber"
+}
+
 function Resolve-DistributionDirectory {
     [CmdletBinding()]
     param(
