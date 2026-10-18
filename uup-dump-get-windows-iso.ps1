@@ -484,6 +484,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     Write-CleanLine "Mounting $installWim index 1 to $mountDir..."
     & dism.exe /Mount-Wim /WimFile:$installWim /Index:1 /MountDir:$mountDir
     if ($LASTEXITCODE -ne 0) { throw "dism /Mount-Wim failed with exit code $LASTEXITCODE" }
+    $isMounted = $true
 
     try {
       $debloatScript = Join-Path $PSScriptRoot "Utils\Debloat\Invoke-Debloat.ps1"
@@ -503,10 +504,13 @@ function Get-WindowsIso($name, $destinationDirectory) {
       Write-CleanLine "Unmounting and committing image at $mountDir..."
       & dism.exe /Unmount-Wim /MountDir:$mountDir /Commit
       if ($LASTEXITCODE -ne 0) { throw "dism /Unmount-Wim /Commit failed with exit code $LASTEXITCODE" }
+      $isMounted = $false
     }
     finally {
+      if ($isMounted) {
+        & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard *> $null
+      }
       if (Test-Path $mountDir) {
-        & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard 2>$null
         Remove-Item $mountDir -Force -Recurse -ErrorAction SilentlyContinue
       }
     }
