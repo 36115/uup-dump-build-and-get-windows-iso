@@ -10,7 +10,7 @@ param(
                 [switch]$esd,
                 [switch]$drivers,
                 [switch]$netfx3,
-                [string]$profileName,
+                [switch]$debloat,
                 [string]$revision
 )
 
@@ -88,14 +88,22 @@ function Get-WindowsIso($name, $destinationDirectory) {
                                 -DriversDestDir (Join-Path $buildDirectory 'Drivers') `
                                 -NetFx3:$netfx3 `
                                 -VirtualEdition $virtualEd `
-
+                                -Debloat:$debloat
 
                 Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
                 Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
 
 
-                if ($debloat) {
-                                Invoke-ImageServicing -buildDirectory $buildDirectory -title $title -architecture $architecture -esd:$esd
+                if ($profileName -and ($profileName -notmatch '(?i)default$')) {
+                                $ednShort = switch -Exact ($edition.ToLower()) {
+                                                "homesinglelanguage" { "HomeSL" }
+                                                "home"               { "Home" }
+                                                "pro"                { "Pro" }
+                                                "multi"              { "Multi" }
+                                                default              { $edition }
+                                }
+                                $finalIsoName = Get-IsoName -TargetName $name -EditionShort $ednShort -VersionBuild $verbuild -BuildNumber $iso.build
+                                Invoke-ImageServicing -buildDirectory $buildDirectory -finalIsoName $finalIsoName -architecture $architecture -esd:$esd
                 }
 
                                 Export-IsoArtifact -BuildDirectory $buildDirectory `
