@@ -116,7 +116,7 @@ on:
         description: "Apply Ultimate Debloat (No Defender, No Telemetry, Tweaks)"
         type: boolean
         required: true
-        default: false
+        default: true
 
 permissions:
   contents: write
