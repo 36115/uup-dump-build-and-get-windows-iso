@@ -9,8 +9,8 @@
     Description = "Universal root debloat configuration for $targetOS"
 
     # Output ISO and Volume naming
-    IsoTag = ''
-    IsoNameFormat = '{TargetName}-{Edition}-{Version}'
+    IsoTag = '.Debloat'
+    IsoNameFormat = '{TargetName}-{Edition}-{Version}-Lite-{Build}'
     VolumeLabel = ''
 
     # UUP dump converter settings (offline servicing requires raw WIM and skipped ISO creation)

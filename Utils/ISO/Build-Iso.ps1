@@ -227,6 +227,30 @@ function Export-IsoMetadata {
   Set-Content -Encoding utf8 -Path $MetadataPath -Value $json
 }
 
+function Get-IsoName {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TargetName,
+
+    [Parameter(Mandatory = $true)]
+    [string]$EditionShort,
+
+    [Parameter(Mandatory = $true)]
+    [string]$VersionBuild,
+
+    [Parameter(Mandatory = $true)]
+    [string]$BuildNumber,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Tag = "Lite"
+  )
+
+  $osPrefix = if ($TargetName -match '(?i)win(dows)?[-_\s]?10') { 'Win10' } else { 'Win11' }
+  $tagPart = if ([string]::IsNullOrWhiteSpace($Tag)) { '' } else { "-$Tag" }
+  return "$osPrefix-$EditionShort-$VersionBuild$tagPart-$BuildNumber"
+}
+
 
 function Resolve-DistributionDirectory {
   [CmdletBinding()]
