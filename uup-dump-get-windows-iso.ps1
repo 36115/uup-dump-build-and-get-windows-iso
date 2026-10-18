@@ -585,9 +585,9 @@ function Get-WindowsIso($name, $destinationDirectory) {
     $bootEfi  = Join-Path $finalMediaDir "efi\Microsoft\boot\efisys.bin"
     
     if ($architecture -ne "arm64" -and (Test-Path $bootEtfs)) {
-      & $cdimageExe "-bootdata:2#p0,e,b`"$bootEtfs`"#pEF,e,b`"$bootEfi`"" -o -m -u2 -udfver102 -l$dvdLabel $finalMediaDir $createdIsoPath
+      & $cdimageExe "-bootdata:2#p0,e,b$bootEtfs#pEF,e,b$bootEfi" -o -m -u2 -udfver102 -l$dvdLabel $finalMediaDir $createdIsoPath
     } else {
-      & $cdimageExe "-bootdata:1#pEF,e,b`"$bootEfi`"" -o -m -u2 -udfver102 -l$dvdLabel $finalMediaDir $createdIsoPath
+      & $cdimageExe "-bootdata:1#pEF,e,b$bootEfi" -o -m -u2 -udfver102 -l$dvdLabel $finalMediaDir $createdIsoPath
     }
     if ($LASTEXITCODE -ne 0) { throw "cdimage.exe failed with exit code $LASTEXITCODE" }
     Write-CleanLine "ISO generated successfully: $createdIsoPath"
