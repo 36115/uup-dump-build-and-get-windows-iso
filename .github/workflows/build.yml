@@ -15,6 +15,7 @@ run-name: >
   ${{ inputs.esd && 'ESD' || '' }}
   ${{ inputs.drivers && 'DRIVERS' || '' }}
   ${{ inputs.netfx3 && 'NETFX3' || '' }}
+  ${{ inputs.profile_name && inputs.profile_name || '' }}
 
 on:
   workflow_dispatch:
@@ -122,6 +123,11 @@ on:
         type: boolean
         required: true
         default: false
+      profile_name:
+        description: "Profile to apply (e.g. Debloat). Leave empty for Default"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -203,6 +209,9 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
+            $opts += ' -profileName "${{ inputs.profile_name }}"'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.revision }}')) {
             $opts += ' -revision "${{ inputs.revision }}"'
           }
