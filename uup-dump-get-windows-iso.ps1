@@ -4,13 +4,14 @@ param(
   [string]$windowsTargetName,
   [string]$destinationDirectory = 'output',
   [ValidateSet("x64", "arm64")] [string]$architecture = "x64",
-  [ValidateSet("pro", "core", "multi", "home", "homesinglelanguage")] [string]$edition = "pro",
+  [ValidateSet("pro", "core", "multi", "home", "homesinglelanguage", "enterprise", "education", "professionalworkstation", "proworkstation", "professionaleducation", "proeducation", "iotenterprise", "iotenterprisek", "serverrdsh")] [string]$edition = "pro",
   [ValidateSet("nb-no", "fr-ca", "fi-fi", "lv-lv", "es-es", "en-gb", "zh-tw", "th-th", "sv-se", "en-us", "es-mx", "bg-bg", "hr-hr", "pt-br", "el-gr", "cs-cz", "it-it", "sk-sk", "pl-pl", "sl-si", "neutral", "ja-jp", "et-ee", "ro-ro", "fr-fr", "pt-pt", "ar-sa", "lt-lt", "hu-hu", "da-dk", "zh-cn", "uk-ua", "tr-tr", "ru-ru", "nl-nl", "he-il", "ko-kr", "sr-latn-rs", "de-de")]
   [string]$lang = "en-us",
   [switch]$esd,
   [switch]$drivers,
   [switch]$netfx3,
   [switch]$debloat,
+  [switch]$wimOnly,
   [string]$base7zPath,
   [string]$revision
 )
@@ -35,7 +36,7 @@ trap {
 $script:reAnsi = [regex]'\x1B\[[0-9;]*[A-Za-z]'
 $script:LastPrintedLine = $null
 function Write-CleanLine([string]$text) {
-  $clean = $script:reAnsi.Replace(($text ?? ''), '')
+  $clean = if ($text) { $script:reAnsi.Replace($text, '') } else { '' }
   if ($clean -eq $script:LastPrintedLine) { return }
   $script:LastPrintedLine = $clean
   Write-Host $clean
@@ -106,31 +107,49 @@ if ($windowsTargetName -match 'beta|dev|wif|canary') {
   $ringLower = @('beta','dev','wif','canary').Where({$windowsTargetName -match $_})[0]
 }
 
-function Get-EditionName($e) {
+function Get-EditionInfo([string]$e) {
   switch ($e.ToLower()) {
-    "core"  { "Core" }
-    "home"  { "Core" }
-    "homesinglelanguage" { "Core" }
-    "multi" { "Multi" }
-    default { "Professional" }
+    "core"                    { [PSCustomObject]@{ Base = "Core"; Virtual = $null; Short = "Home"; Fancy = "Windows Home" } }
+    "home"                    { [PSCustomObject]@{ Base = "Core"; Virtual = $null; Short = "Home"; Fancy = "Windows Home" } }
+    "homesinglelanguage"      { [PSCustomObject]@{ Base = "Core"; Virtual = "CoreSingleLanguage"; Short = "HomeSL"; Fancy = "Windows Home Single Language" } }
+    "coresinglelanguage"      { [PSCustomObject]@{ Base = "Core"; Virtual = "CoreSingleLanguage"; Short = "HomeSL"; Fancy = "Windows Home Single Language" } }
+    "pro"                     { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = "Pro"; Fancy = "Windows Pro" } }
+    "professional"            { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = "Pro"; Fancy = "Windows Pro" } }
+    "professionalworkstation" { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalWorkstation"; Short = "ProWorkstation"; Fancy = "Windows Pro for Workstations" } }
+    "proworkstation"          { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalWorkstation"; Short = "ProWorkstation"; Fancy = "Windows Pro for Workstations" } }
+    "professionaleducation"   { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalEducation"; Short = "ProEducation"; Fancy = "Windows Pro Education" } }
+    "proeducation"            { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalEducation"; Short = "ProEducation"; Fancy = "Windows Pro Education" } }
+    "education"               { [PSCustomObject]@{ Base = "Professional"; Virtual = "Education"; Short = "Education"; Fancy = "Windows Education" } }
+    "enterprise"              { [PSCustomObject]@{ Base = "Professional"; Virtual = "Enterprise"; Short = "Enterprise"; Fancy = "Windows Enterprise" } }
+    "iotenterprise"           { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterprise"; Short = "IoTEnterprise"; Fancy = "Windows IoT Enterprise" } }
+    "iotenterprisek"          { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterpriseK"; Short = "IoTEnterpriseK"; Fancy = "Windows IoT Enterprise K" } }
+    "serverrdsh"              { [PSCustomObject]@{ Base = "Professional"; Virtual = "ServerRdsh"; Short = "ServerRdsh"; Fancy = "Windows Enterprise multi-session" } }
+    "multi"                   { [PSCustomObject]@{ Base = "Multi"; Virtual = $null; Short = "Multi"; Fancy = "Windows Multi-Edition" } }
+    default                   { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = $e; Fancy = "Windows $e" } }
   }
+}
+
+function Get-EditionName($e) {
+  return (Get-EditionInfo $e).Base
 }
 
 $dotSystemRevision = if ([string]::IsNullOrWhiteSpace($revision)) { '' } else { ".$revision" }
 $systemRevision = if ([string]::IsNullOrWhiteSpace($revision)) { '' } else { " $revision" }
 
+$script:CurrentEditionInfo = Get-EditionInfo $edition
+
 $TARGETS = @{
-  "windows-10"           = @{ search="windows 10 19045$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-11old"        = @{ search="windows 11 22631$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-11"           = @{ search="windows 11 26100$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-11new"        = @{ search="windows 11 26200$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-11beta"       = @{ search="windows 11 26120$dotSystemRevision $arch"; edition=(Get-EditionName $edition); ring="Beta" }
-  "windows-11dev"        = @{ search="windows 11 26220$dotSystemRevision $arch"; edition=(Get-EditionName $edition); ring="Wif" }
-  "windows-1126h1"       = @{ search="windows 11 28000$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-1126h2"       = @{ search="windows 11 26300$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-1126h2beta"   = @{ search="windows 11 26340$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-  "windows-dev"          = @{ search="windows 11 26300$dotSystemRevision $arch"; edition=(Get-EditionName $edition); ring="Dev" }
-  "windows-canary"       = @{ search="windows 11$systemRevision $arch"; edition=(Get-EditionName $edition); ring="Canary" }
+  "windows-10"           = @{ search="windows 10 19045$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-11old"        = @{ search="windows 11 22631$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-11"           = @{ search="windows 11 26100$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-11new"        = @{ search="windows 11 26200$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-11beta"       = @{ search="windows 11 26120$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; ring="Beta"; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-11dev"        = @{ search="windows 11 26220$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; ring="Wif"; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-1126h1"       = @{ search="windows 11 28000$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-1126h2"       = @{ search="windows 11 26300$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-1126h2beta"   = @{ search="windows 11 26340$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-dev"          = @{ search="windows 11 26300$dotSystemRevision $arch"; edition=$script:CurrentEditionInfo.Base; ring="Dev"; virtualEdition=$script:CurrentEditionInfo.Virtual }
+  "windows-canary"       = @{ search="windows 11$systemRevision $arch"; edition=$script:CurrentEditionInfo.Base; ring="Canary"; virtualEdition=$script:CurrentEditionInfo.Virtual }
 }
 
 function New-QueryString([hashtable]$parameters) {
@@ -158,14 +177,14 @@ function Get-UupDumpIso($name, $target) {
   Write-CleanLine "Getting the $name metadata"
   $result = Invoke-UupDumpApi listid @{ search = $target.search }
 
-  $result.response.builds.PSObject.Properties
-  | ForEach-Object {
+  $result.response.builds.PSObject.Properties |
+    ForEach-Object {
       $id = $_.Value.uuid
       $uupDumpUrl = 'https://uupdump.net/selectlang.php?' + (New-QueryString @{ id = $id })
       Write-CleanLine "Processing $name $id ($uupDumpUrl)"
       $_
-    }
-  | Where-Object {
+    } |
+    Where-Object {
       if ($_.Value.title -match '\.NET Framework') {
             Write-CleanLine "Skipping, ignore .NET Framework update."
             return $false
@@ -184,8 +203,8 @@ L2: Got preview=true."
         return $ok
       }
       $true
-    }
-  | ForEach-Object {
+    } |
+    ForEach-Object {
       $id = $_.Value.uuid
       Write-CleanLine "Getting the $name $id langs metadata"
       $result = Invoke-UupDumpApi listlangs @{ id = $id }
@@ -207,8 +226,8 @@ L4: Got langs=$($langs -join ',')."
       }
       $_.Value | Add-Member -NotePropertyMembers @{ editions = $eds }
       $_
-    }
-  | Where-Object {
+    } |
+    Where-Object {
       $langs = $_.Value.langs.PSObject.Properties.Name
       $editions = $_.Value.editions.PSObject.Properties.Name
       $res = $true
@@ -251,9 +270,9 @@ L7: Got editions={1}." -f (Get-EditionName $edition), ($editions -join ','))
       }
 
       $res
-    }
-  | Select-Object -First 1
-  | ForEach-Object {
+    } |
+    Select-Object -First 1 |
+    ForEach-Object {
       $id = $_.Value.uuid
       [PSCustomObject]@{
         name               = $name
@@ -331,9 +350,9 @@ function Get-WindowsIso($name, $destinationDirectory) {
   $iso = Get-UupDumpIso $name $TARGETS.$name
   if (-not $iso) { throw "Can't find UUP for $name ($($TARGETS.$name.search)), lang=$lang." }
 
-  $isHomeSingleLang = ($edition.ToLower() -eq "homesinglelanguage")
-  $hasVirtualMember = ($iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition) -or $isHomeSingleLang
-  $virtualEdn = if ($iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition) { $iso.virtualEdition } elseif ($isHomeSingleLang) { "CoreSingleLanguage" } else { $null }
+  $edInfo = Get-EditionInfo $edition
+  $hasVirtualMember = [bool]$edInfo.Virtual
+  $virtualEdn = $edInfo.Virtual
   $effectiveEdition = if ($hasVirtualMember) { $virtualEdn } elseif ($iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition) { $iso.edition } else { $TARGETS.$name.edition }
 
   if (!$preview) {
@@ -385,6 +404,11 @@ function Get-WindowsIso($name, $destinationDirectory) {
       -replace '^(StartVirtual\s*)=.*','$1=1' `
       -replace '^(vDeleteSource\s*)=.*','$1=1' `
       -replace '^(vAutoEditions\s*)=.*',"`$1=$virtualEdn"
+  }
+  if ($wimOnly) {
+    $convertConfig = $convertConfig `
+      -replace '^(SkipISO\s*)=.*', '$1=1' `
+      -replace '^(vSkipISO\s*)=.*', '$1=1'
   }
   if ($debloat) {
     $convertConfig = $convertConfig `
@@ -452,14 +476,16 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
   Pop-Location
 
-  if ($debloat) {
-    Write-CleanLine "Locating distribution folder for offline servicing..."
+  if ($debloat -or $wimOnly) {
+    Write-CleanLine "Locating distribution folder..."
     $distDir = Get-ChildItem -Path $buildDirectory -Directory | Where-Object { 
       (Test-Path (Join-Path $_.FullName "sources\install.wim")) -or (Test-Path (Join-Path $_.FullName "sources\install.esd"))
     } | Select-Object -First 1 -ExpandProperty FullName
 
     if (-not $distDir) {
       if (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.wim")) {
+        $distDir = Join-Path $buildDirectory "ISOFOLDER"
+      } elseif (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.esd")) {
         $distDir = Join-Path $buildDirectory "ISOFOLDER"
       } else {
         throw "Could not locate distribution folder with sources\install.wim in $buildDirectory"
@@ -472,22 +498,21 @@ function Get-WindowsIso($name, $destinationDirectory) {
       $installEsd = Join-Path $distDir "sources\install.esd"
       if (Test-Path $installEsd) {
         Write-CleanLine "Exporting install.esd to install.wim for servicing..."
-        & dism.exe /Export-Image /SourceImageFile:$installEsd /SourceIndex:1 /DestinationImageFile:$installWim
+        $esdImages = Get-WindowsImage -ImagePath $installEsd
+        for ($i = 1; $i -le $esdImages.Count; $i++) {
+          & dism.exe /Export-Image /SourceImageFile:$installEsd /SourceIndex:$i /DestinationImageFile:$installWim
+        }
         Remove-Item $installEsd -Force
       } else {
         throw "Neither install.wim nor install.esd found in $distDir\sources"
       }
     }
 
-    $mountDir = Join-Path $env:TEMP "Mount_Debloat_$([System.IO.Path]::GetRandomFileName())"
-    New-Item -ItemType Directory -Path $mountDir -Force | Out-Null
-    Add-MpPreference -ExclusionPath $mountDir -ErrorAction SilentlyContinue
-    Write-CleanLine "Mounting $installWim index 1 to $mountDir..."
-    & dism.exe /Mount-Wim /WimFile:$installWim /Index:1 /MountDir:$mountDir
-    if ($LASTEXITCODE -ne 0) { throw "dism /Mount-Wim failed with exit code $LASTEXITCODE" }
-    $isMounted = $true
+    if ($debloat) {
+      $wimImages = Get-WindowsImage -ImagePath $installWim
+      $imageCount = $wimImages.Count
+      Write-CleanLine "Found $imageCount image index(es) in $installWim to service."
 
-    try {
       $debloatScript = Join-Path $PSScriptRoot "Utils\Debloat\Invoke-Debloat.ps1"
       $regPack = Join-Path $PSScriptRoot "Utils\Debloat\Windows-11-REG-Pack-(NoDefender).reg"
       if (-not (Test-Path $regPack)) {
@@ -495,57 +520,119 @@ function Get-WindowsIso($name, $destinationDirectory) {
       }
       $nsudo = Join-Path $PSScriptRoot "Utils\NSudo\x64\NSudoLC.exe"
 
-      Write-CleanLine "Running Invoke-Debloat.ps1 against mounted image..."
-      & powershell -ExecutionPolicy Bypass -File $debloatScript `
-          -MountDir $mountDir `
-          -RegPackPath $regPack `
-          -NSudoPath $nsudo
-      if ($LASTEXITCODE -ne 0) { throw "Invoke-Debloat.ps1 failed with exit code $LASTEXITCODE" }
+      for ($idx = 1; $idx -le $imageCount; $idx++) {
+        $currentImageName = ($wimImages | Where-Object { $_.ImageIndex -eq $idx }).ImageName
+        Write-CleanLine "=== Servicing index $idx of ${imageCount}: $currentImageName ==="
 
-      # Ensure location is not holding the mount directory and release handles
-      Set-Location $PSScriptRoot
-      [System.GC]::Collect()
-      [System.GC]::WaitForPendingFinalizers()
-      Start-Sleep -Seconds 2
+        $mountDir = Join-Path $env:TEMP "Mount_Debloat_$([System.IO.Path]::GetRandomFileName())"
+        New-Item -ItemType Directory -Path $mountDir -Force | Out-Null
+        Add-MpPreference -ExclusionPath $mountDir -ErrorAction SilentlyContinue
+        Write-CleanLine "Mounting $installWim index $idx to $mountDir..."
+        & dism.exe /Mount-Wim /WimFile:$installWim /Index:$idx /MountDir:$mountDir
+        if ($LASTEXITCODE -ne 0) { throw "dism /Mount-Wim failed on index $idx with exit code $LASTEXITCODE" }
+        $isMounted = $true
 
-      Write-CleanLine "Unmounting and committing image at $mountDir..."
-      $unmountSuccess = $false
-      for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+          Write-CleanLine "Running Invoke-Debloat.ps1 against mounted image index $idx..."
+          & powershell -ExecutionPolicy Bypass -File $debloatScript `
+              -MountDir $mountDir `
+              -RegPackPath $regPack `
+              -NSudoPath $nsudo
+          if ($LASTEXITCODE -ne 0) { throw "Invoke-Debloat.ps1 failed on index $idx with exit code $LASTEXITCODE" }
+
+          Set-Location $PSScriptRoot
           [System.GC]::Collect()
           [System.GC]::WaitForPendingFinalizers()
-          & dism.exe /Unmount-Wim /MountDir:$mountDir /Commit
-          if ($LASTEXITCODE -eq 0) {
-              $unmountSuccess = $true
-              $isMounted = $false
-              break
-          }
-          Write-Warning "dism /Unmount-Wim /Commit attempt $attempt failed with exit code $LASTEXITCODE. Retrying in $($attempt * 3) seconds..."
-          Start-Sleep -Seconds ($attempt * 3)
-      }
-      if (-not $unmountSuccess) {
-          throw "dism /Unmount-Wim /Commit failed after 5 attempts with exit code $LASTEXITCODE"
-      }
-    }
-    finally {
-      if ($isMounted) {
-        for ($discardAttempt = 1; $discardAttempt -le 3; $discardAttempt++) {
-          & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard *> $null
-          if ($LASTEXITCODE -eq 0) { break }
           Start-Sleep -Seconds 2
+
+          Write-CleanLine "Unmounting and committing image at $mountDir..."
+          $unmountSuccess = $false
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+              [System.GC]::Collect()
+              [System.GC]::WaitForPendingFinalizers()
+              & dism.exe /Unmount-Wim /MountDir:$mountDir /Commit
+              if ($LASTEXITCODE -eq 0) {
+                  $unmountSuccess = $true
+                  $isMounted = $false
+                  break
+              }
+              Write-Warning "dism /Unmount-Wim /Commit attempt $attempt failed with exit code $LASTEXITCODE. Retrying in $($attempt * 3) seconds..."
+              Start-Sleep -Seconds ($attempt * 3)
+          }
+          if (-not $unmountSuccess) {
+              throw "dism /Unmount-Wim /Commit failed after 5 attempts with exit code $LASTEXITCODE on index $idx"
+          }
         }
-      }
-      Remove-MpPreference -ExclusionPath $mountDir -ErrorAction SilentlyContinue
-      if (Test-Path $mountDir) {
-        Remove-Item $mountDir -Force -Recurse -ErrorAction SilentlyContinue
+        finally {
+          if ($isMounted) {
+            for ($discardAttempt = 1; $discardAttempt -le 3; $discardAttempt++) {
+              & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard *> $null
+              if ($LASTEXITCODE -eq 0) { break }
+              Start-Sleep -Seconds 2
+            }
+          }
+          Remove-MpPreference -ExclusionPath $mountDir -ErrorAction SilentlyContinue
+          if (Test-Path $mountDir) {
+            Remove-Item $mountDir -Force -Recurse -ErrorAction SilentlyContinue
+          }
+        }
       }
     }
 
     # If ESD was requested
     if ($esd) {
-      Write-CleanLine "Converting install.wim to install.esd..."
+      $wimImages = Get-WindowsImage -ImagePath $installWim
+      $imageCount = $wimImages.Count
+      Write-CleanLine "Converting install.wim ($imageCount index(es)) to install.esd..."
       $installEsd = Join-Path $distDir "sources\install.esd"
-      & dism.exe /Export-Image /SourceImageFile:$installWim /SourceIndex:1 /DestinationImageFile:$installEsd /Compress:recovery
+      if (Test-Path $installEsd) { Remove-Item $installEsd -Force }
+      for ($idx = 1; $idx -le $imageCount; $idx++) {
+        Write-CleanLine "Exporting index $idx of $imageCount to install.esd..."
+        & dism.exe /Export-Image /SourceImageFile:$installWim /SourceIndex:$idx /DestinationImageFile:$installEsd /Compress:recovery
+        if ($LASTEXITCODE -ne 0) { throw "dism /Export-Image failed on index $idx with exit code $LASTEXITCODE" }
+      }
       Remove-Item $installWim -Force
+    }
+
+    if ($wimOnly) {
+      Write-CleanLine "wimOnly mode active. Staging serviced WIM/ESD artifact..."
+      $finalArtifact = if ($esd) { Join-Path $distDir "sources\install.esd" } else { Join-Path $distDir "sources\install.wim" }
+      $targetExt = if ($esd) { ".esd" } else { ".wim" }
+      $outWimName = "$name-$($edInfo.Short)$targetExt"
+      $outWimPath = Join-Path $destinationDirectory $outWimName
+
+      if (-not (Test-Path $destinationDirectory)) {
+        New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+      }
+
+      Copy-Item -Path $finalArtifact -Destination $outWimPath -Force
+      Write-CleanLine "Serviced image saved to $outWimPath"
+
+      # Also preserve cdimage.exe if available so assembly jobs don't need to re-fetch
+      $cdimageExe = (Get-ChildItem -Path $buildDirectory -Filter "cdimage.exe" -Recurse | Select-Object -First 1).FullName
+      if ($cdimageExe -and (Test-Path $cdimageExe)) {
+        Copy-Item -Path $cdimageExe -Destination (Join-Path $destinationDirectory "cdimage.exe") -Force
+      }
+
+      # Write JSON metadata
+      $wimImages = Get-WindowsImage -ImagePath $outWimPath
+      $wimMetadata = [PSCustomObject]@{
+        name       = $name
+        edition    = $edInfo.Short
+        build      = $iso.build
+        version    = $verbuild
+        wimFile    = $outWimName
+        images     = @($wimImages | ForEach-Object { [PSCustomObject]@{ index = $_.ImageIndex; name = $_.ImageName; version = $_.Version } })
+      }
+      $wimMetadata | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $destinationDirectory "$name-$($edInfo.Short).json")
+
+      if ($env:GITHUB_ENV) {
+        Write-Output "WIM_FILE=$outWimPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        Write-Output "EDITION_NAME=$($edInfo.Short)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        Write-Output "ISO_NAME=$name-$($edInfo.Short)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      }
+      Write-CleanLine "wimOnly completed successfully for $($edInfo.Short)."
+      return
     }
 
     # Check for custom base media (base.7z)
@@ -589,13 +676,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
     $finalIsoName = if ($debloat) {
       $osPrefix = if ($name -match '^windows-10') { 'Win10' } else { 'Win11' }
-      $ednShort = switch -Exact ($edition.ToLower()) {
-        "homesinglelanguage" { "HomeSL" }
-        "home"               { "Home" }
-        "pro"                { "Pro" }
-        "multi"              { "Multi" }
-        default              { $edition }
-      }
+      $ednShort = $edInfo.Short
       "$osPrefix-$ednShort-$verbuild-Lite-$($iso.build)"
     } else {
       $title
