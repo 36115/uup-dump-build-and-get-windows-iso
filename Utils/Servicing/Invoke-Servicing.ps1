@@ -652,6 +652,96 @@ function Remove-OfflineCapability {
     }
 }
 
+function Set-OfflineStartLayout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir
+    )
+    $shellDir = "$MountDir\Users\Default\AppData\Local\Microsoft\Windows\Shell"
+    if (-not (Test-Path $shellDir)) {
+        New-Item -ItemType Directory -Path $shellDir -Force | Out-Null
+    }
+    $layoutJson = "{" + "`r`n" +
+        '  "pinnedList": [' + "`r`n" +
+        '    { "packagedAppId": "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel" },' + "`r`n" +
+        '    { "desktopAppId": "Microsoft.Windows.Explorer" }' + "`r`n" +
+        '  ]' + "`r`n" +
+        '}'
+    [System.IO.File]::WriteAllText("$shellDir\LayoutModification.json", $layoutJson, [System.Text.Encoding]::UTF8)
+
+    $layoutXml = '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"><LayoutOptions StartTileGroupCellWidth="6" /><DefaultLayoutOverride><StartLayoutCollection><defaultlayout:StartLayout GroupCellWidth="6" /></StartLayoutCollection></DefaultLayoutOverride></LayoutModificationTemplate>'
+    [System.IO.File]::WriteAllText("$shellDir\LayoutModification.xml", $layoutXml, [System.Text.Encoding]::UTF8)
+    Write-Success "Generated clean Start Menu layouts (LayoutModification.json & LayoutModification.xml)."
+}
+
+function Set-OfflineDefaultAssociations {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir
+    )
+    $oemAssocXml = '<?xml version="1.0" encoding="UTF-8"?>' + "`r`n" +
+'<DefaultAssociations>' + "`r`n" +
+'  <Association Identifier=".bmp" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".dib" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".gif" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".ico" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".jfif" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".jpe" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".jpeg" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".jpg" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".jxr" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".png" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".tif" ProgId="TIFImage.Document" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".tiff" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
+'  <Association Identifier=".txt" ProgId="txtfile" ApplicationName="Notepad" />' + "`r`n" +
+'</DefaultAssociations>'
+    $oemDest = "$MountDir\Windows\System32\OEMDefaultAssociations.xml"
+    [System.IO.File]::WriteAllText($oemDest, $oemAssocXml, [System.Text.Encoding]::UTF8)
+    Write-Success "Generated: $oemDest"
+}
+
+function New-FileShortcut {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string]$TargetPath,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Arguments = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$IconLocation = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$WorkingDirectory = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$Description = ""
+    )
+    $parent = Split-Path $Path -Parent
+    if ($parent -and -not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $wsh = New-Object -ComObject WScript.Shell
+    try {
+        $shortcut = $wsh.CreateShortcut($Path)
+        $shortcut.TargetPath = $TargetPath
+        if ($Arguments) { $shortcut.Arguments = $Arguments }
+        if ($IconLocation) { $shortcut.IconLocation = $IconLocation }
+        if ($WorkingDirectory) { $shortcut.WorkingDirectory = $WorkingDirectory }
+        if ($Description) { $shortcut.Description = $Description }
+        $shortcut.Save()
+        Write-Success "Created shortcut: $Path"
+    } finally {
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
