@@ -9,7 +9,7 @@
     - Applies curated registry pack and TrustedInstaller offline keys via NSudoLC.
     - Modifies IntegratedServicesRegionPolicySet.json in-place (worldwide Edge uninstall).
     - Generates OEM associations, Notepad shortcut, and self-deleting SetupComplete.cmd.
-    - Executes component cleanup (/ResetBase), purges cache/temp/WER/insights, and runs the 135-point validation suite.
+    - Executes component cleanup (/ResetBase), purges cache/temp/WER/insights, and runs the 137-point validation suite.
 #>
 
 [CmdletBinding()]
@@ -1385,7 +1385,7 @@ if (-not $SkipCleanup) {
     Write-Info "Skipping component cleanup (-SkipCleanup specified)."
 }
 
-Write-Info "Purging offline cache and temporary files across 9 categories (NTLite cache.temp)..."
+Write-Info "Purging offline cache and temporary files across 10 categories (NTLite cache.temp & winsxs.backup)..."
 
 # Category 1: Windows Update & SoftwareDistribution Cache
 $swDistDirs = @(
@@ -1522,13 +1522,28 @@ foreach ($di in $dumpItems) {
 Clear-ForceDirectoryContents "$MountDir\Windows\Temp"
 Clear-ForceDirectoryContents "$MountDir\Users\Default\AppData\Local\Temp"
 
+# Category 10: Manifest Backup (WinSxS\Backup) (NTLite winsxs.backup)
+$winsxsBackup = "$MountDir\Windows\WinSxS\Backup"
+if (Test-Path $winsxsBackup) {
+    if ($NSudoPath -and (Test-Path $NSudoPath)) {
+        & $NSudoPath -U:T -P:E -Wait cmd /c "del /f /q /a `"$winsxsBackup\*`" >nul 2>&1"
+    } else {
+        & takeown.exe /f "$winsxsBackup\*" /a *> $null
+        & icacls.exe "$winsxsBackup\*" /grant *S-1-5-32-544:F /c /q *> $null
+        cmd /c "del /f /q /a `"$winsxsBackup\*`" >nul 2>&1"
+    }
+    if (-not (Test-Path $winsxsBackup)) {
+        New-Item -ItemType Directory -Path $winsxsBackup -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+}
+
 Write-Success "Offline cache and temp files purged; root directory anchors preserved."
 
 # -------------------------------------------------------------
-# STEP 11: 135-Point Automated Quality Gate / Validation
+# STEP 11: 137-Point Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 135-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 137-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -1933,51 +1948,58 @@ if (-not $SkipValidation) {
     # 120. Windows Temp Directory Exists
     Assert-Check -Name "Windows Temp Directory Exists" -Pass (Test-Path "$MountDir\Windows\Temp") -Detail "Root directory anchor preserved"
 
-    # 121. CBS Logs Purged
+    # 121. WinSxS Backup Empty
+    $wsbCount = (Get-ChildItem -Path "$MountDir\Windows\WinSxS\Backup" -Recurse -File -ErrorAction SilentlyContinue).Count
+    Assert-Check -Name "WinSxS Backup Empty" -Pass ($wsbCount -eq 0) -Detail "All backup manifests and catalogs purged"
+
+    # 122. WinSxS Backup Directory Exists
+    Assert-Check -Name "WinSxS Backup Directory Exists" -Pass (Test-Path "$MountDir\Windows\WinSxS\Backup") -Detail "Root servicing directory anchor preserved"
+
+    # 123. CBS Logs Purged
     Assert-Check -Name "CBS Logs Purged" -Pass (-not (Test-Path "$MountDir\Windows\Logs\CBS\CBS.log")) -Detail "CBS.log deleted"
 
-    # 122. Panther Directory Purged
+    # 124. Panther Directory Purged
     Assert-Check -Name "Panther Directory Purged" -Pass (-not (Test-Path "$MountDir\Windows\Panther")) -Detail "Windows\Panther directory purged"
 
-    # 123. DeviceCensus Binary System32 Deleted
+    # 125. DeviceCensus Binary System32 Deleted
     Assert-Check -Name "DeviceCensus Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\DeviceCensus.exe")) -Detail "Deleted"
 
-    # 124. invagent Binary System32 Deleted
+    # 126. invagent Binary System32 Deleted
     Assert-Check -Name "invagent Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\invagent.dll")) -Detail "Deleted"
 
-    # 125. appraiser Binary System32 Deleted
+    # 127. appraiser Binary System32 Deleted
     Assert-Check -Name "appraiser Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\appraiser.dll")) -Detail "Deleted"
 
-    # 126. Appraiser Directory System32 Purged
+    # 128. Appraiser Directory System32 Purged
     Assert-Check -Name "Appraiser Directory System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\appraiser")) -Detail "Purged"
 
-    # 127. WerFault.exe System32 Deleted
+    # 129. WerFault.exe System32 Deleted
     Assert-Check -Name "WerFault.exe System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\WerFault.exe")) -Detail "Deleted"
 
-    # 128. WerFault.exe SysWOW64 Deleted
+    # 130. WerFault.exe SysWOW64 Deleted
     Assert-Check -Name "WerFault.exe SysWOW64 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\SysWOW64\WerFault.exe")) -Detail "Deleted"
 
-    # 129. wermgr.exe System32 Deleted
+    # 131. wermgr.exe System32 Deleted
     Assert-Check -Name "wermgr.exe System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\wermgr.exe")) -Detail "Deleted"
 
-    # 130. wersvc.dll System32 Deleted
+    # 132. wersvc.dll System32 Deleted
     Assert-Check -Name "wersvc.dll System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\wersvc.dll")) -Detail "Deleted"
 
-    # 131. Region Policy In-Place Patch
+    # 133. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 132. OEMDefaultAssociations.xml
+    # 134. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 133. Notepad.lnk
+    # 135. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 134. SetupComplete.cmd Exists
+    # 136. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 135. SetupComplete.cmd Has Self-Delete
+    # 137. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
