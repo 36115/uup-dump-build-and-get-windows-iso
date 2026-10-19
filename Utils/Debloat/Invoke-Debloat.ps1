@@ -306,6 +306,76 @@ if (Test-Path $policyPath) {
 }
 
 # -------------------------------------------------------------
+# STEP 7: Generate OEMDefaultAssociations.xml Dynamically
+# -------------------------------------------------------------
+Write-Step "[7/11] Generating OEMDefaultAssociations.xml dynamically..."
+$oemAssocXml = @'
+<?xml version="1.0" encoding="UTF-8"?>
+<DefaultAssociations>
+  <Association Identifier=".bmp" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".dib" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".gif" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".ico" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".jfif" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".jpe" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".jpeg" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".jpg" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".jxr" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".png" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".tif" ProgId="TIFImage.Document" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".tiff" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />
+  <Association Identifier=".txt" ProgId="txtfile" ApplicationName="Notepad" />
+</DefaultAssociations>
+'@
+$oemDest = "$MountDir\Windows\System32\OEMDefaultAssociations.xml"
+[System.IO.File]::WriteAllText($oemDest, $oemAssocXml, [System.Text.Encoding]::UTF8)
+Write-Success "Generated: $oemDest"
+
+# -------------------------------------------------------------
+# STEP 8: Create Notepad.lnk Dynamically
+# -------------------------------------------------------------
+Write-Step "[8/11] Creating Notepad.lnk shortcut dynamically..."
+$accDir = "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories"
+if (-not (Test-Path $accDir)) { New-Item -ItemType Directory -Path $accDir -Force | Out-Null }
+
+$wsh = New-Object -ComObject WScript.Shell
+$shortcut = $wsh.CreateShortcut("$accDir\Notepad.lnk")
+$shortcut.TargetPath = "C:\Windows\System32\notepad.exe"
+$shortcut.IconLocation = "C:\Windows\System32\notepad.exe,0"
+$shortcut.WorkingDirectory = "C:\Windows\System32"
+$shortcut.Description = "Notepad"
+$shortcut.Save()
+[System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
+Write-Success "Created shortcut: $accDir\Notepad.lnk"
+
+
+# -------------------------------------------------------------
+# STEP 9: Generate Self-Deleting SetupComplete.cmd
+# -------------------------------------------------------------
+Write-Step "[9/11] Generating self-deleting SetupComplete.cmd..."
+$setupDir = "$MountDir\Windows\Setup\Scripts"
+if (-not (Test-Path $setupDir)) { New-Item -ItemType Directory -Path $setupDir -Force | Out-Null }
+
+$setupCmd = @'
+@echo off
+powercfg -duplicatescheme a1841308-3541-4fab-bc81-f71556f20b4a
+powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+
+compact /c /s /a /i /exe:lzx "C:\Program Files\*"
+compact /c /s /a /i /exe:lzx "C:\Program Files (x86)\*"
+compact /c /s /a /i /exe:lzx "C:\ProgramData\*"
+compact /c /s /a /i /exe:lzx "C:\Users\*"
+compact /c /s /a /i /exe:lzx "C:\Windows\*"
+
+cd /d %SystemDrive%\
+start /b "" cmd /c "ping 127.0.0.1 -n 2 >nul & rd /s /q "%WINDIR%\Setup\Scripts""
+exit
+'@
+[System.IO.File]::WriteAllText("$setupDir\SetupComplete.cmd", $setupCmd, [System.Text.Encoding]::ASCII)
+Write-Success "Generated: $setupDir\SetupComplete.cmd (erases Scripts directory on completion)."
+
+# -------------------------------------------------------------
 # STEP 10: Component Cleanup (/ResetBase)
 # -------------------------------------------------------------
 if (-not $SkipCleanup) {
@@ -408,11 +478,24 @@ if (-not $SkipValidation) {
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
+    # 40. OEMDefaultAssociations.xml
+    Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
+
+    # 41. Notepad.lnk
+    Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
+
+    # 42. SetupComplete.cmd Exists
+    Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
+
+    # 43. SetupComplete.cmd Has Self-Delete
+    $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
+    Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
+
     $failed = $script:results | Where-Object { -not $_.Pass }
     if ($failed) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 15/15 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 19/19 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
