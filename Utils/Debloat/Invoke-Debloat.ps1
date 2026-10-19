@@ -9,7 +9,7 @@
     - Applies curated registry pack and TrustedInstaller offline keys via NSudoLC.
     - Modifies IntegratedServicesRegionPolicySet.json in-place (worldwide Edge uninstall).
     - Generates OEM associations, Notepad shortcut, and self-deleting SetupComplete.cmd.
-    - Executes component cleanup (/ResetBase), purges cache/temp/WER/insights, and runs the 147-point validation suite.
+    - Executes component cleanup (/ResetBase), purges cache/temp/WER/insights/IE, and runs the 158-point validation suite.
 #>
 
 [CmdletBinding()]
@@ -170,6 +170,14 @@ foreach ($line in $provMatches) {
         & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$pkgName /NoRestart *> $null
         Write-Success "Removed provisioned AppX package: $pkgName"
     }
+}
+
+# Remove Internet Explorer capability if present (NTLite internetexplorer / internetexplorer32)
+Write-Info "Checking for Internet Explorer capability (Browser.InternetExplorer)..."
+$ieCapOut = & dism.exe /English /Image:$MountDir /Get-CapabilityInfo /CapabilityName:Browser.InternetExplorer~~~~0.0.11.0 2>&1
+if ($ieCapOut -match 'State\s*:\s*Installed') {
+    & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:Browser.InternetExplorer~~~~0.0.11.0 /NoRestart *> $null
+    Write-Success "Removed capability: Browser.InternetExplorer~~~~0.0.11.0"
 }
 
 # -------------------------------------------------------------
@@ -788,6 +796,45 @@ foreach ($filter in $werMuiFilters) {
     }
 }
 
+# Internet Explorer & Internet Explorer - 32 bit (NTLite internetexplorer / internetexplorer32)
+# Purges 64-bit and 32-bit browser shells, setup stubs, and shortcuts while strictly preserving MSHTML engine (mshtml.dll)
+$ieDirs = @(
+    "$MountDir\Program Files\Internet Explorer",
+    "$MountDir\Program Files (x86)\Internet Explorer"
+)
+foreach ($dir in $ieDirs) {
+    if (Test-Path $dir) {
+        Remove-ForceDirectory $dir
+        Write-Success "Purged Internet Explorer directory: $(Split-Path $dir -Leaf)"
+    }
+}
+
+$ieBinaries = @(
+    "$MountDir\Windows\System32\ie4uinit.exe",
+    "$MountDir\Windows\System32\ieUnatt.exe",
+    "$MountDir\Windows\SysWOW64\ie4uinit.exe",
+    "$MountDir\Windows\SysWOW64\ieUnatt.exe"
+)
+foreach ($bin in $ieBinaries) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted Internet Explorer binary: $(Split-Path $bin -Leaf)"
+    }
+}
+
+$ieShortcuts = @(
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Internet Explorer.lnk",
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Internet Explorer.lnk",
+    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Internet Explorer.lnk",
+    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessories\Internet Explorer.lnk"
+)
+foreach ($lnk in $ieShortcuts) {
+    if (Test-Path $lnk) {
+        Remove-ForceFile $lnk
+        Write-Success "Deleted Internet Explorer shortcut: $(Split-Path $lnk -Leaf)"
+    }
+}
+
 # -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
@@ -1323,6 +1370,25 @@ try {
         }
         Write-Success "Purged Microsoft Family and ParentalControls AppxAllUserStore registrations, TaskCache, and unbound from Svchost."
 
+        # 5s. PURGE INTERNET EXPLORER & 32-BIT REGISTRATIONS (NTLite internetexplorer / internetexplorer32)
+        Write-Info "Purging Internet Explorer StartMenuInternet, App Paths, Active Setup, and BHO registrations..."
+        $ieRegKeys = @(
+            # Native 64-bit
+            "HKLM\OFFLINE_SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\iexplore.exe",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Active Setup\Installed Components\{89820200-ECBD-11cf-8B85-00AA005B4383}",
+            # WOW64 32-bit
+            "HKLM\OFFLINE_SOFTWARE\WOW6432Node\Clients\StartMenuInternet\IEXPLORE.EXE",
+            "HKLM\OFFLINE_SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\iexplore.exe",
+            "HKLM\OFFLINE_SOFTWARE\WOW6432Node\Microsoft\Active Setup\Installed Components\{89820200-ECBD-11cf-8B85-00AA005B4383}",
+            # Protocol associations
+            "HKLM\OFFLINE_SOFTWARE\Classes\IE.HTTP",
+            "HKLM\OFFLINE_SOFTWARE\Classes\IE.HTTPS",
+            "HKLM\OFFLINE_SOFTWARE\Classes\IE.FTP"
+        )
+        Invoke-ElevatedRegDelete $ieRegKeys
+        Write-Success "Purged Internet Explorer native and WOW64 registry registrations."
+
         Write-Success "AeDebug neutralized, WER TaskCache purged, and WER policies enforced."
     }
 finally {
@@ -1467,6 +1533,13 @@ schtasks /delete /tn "\Microsoft\Windows\Application Experience\ProgramDataUpdat
 schtasks /delete /tn "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator" /f >nul 2>&1
 schtasks /delete /tn "\Microsoft\Windows\Windows Error Reporting\QueueReporting" /f >nul 2>&1
 schtasks /delete /tn "\Microsoft\Windows\ParentalControls" /f >nul 2>&1
+
+del /f /q "%ProgramFiles%\Internet Explorer\iexplore.exe" >nul 2>&1
+del /f /q "%ProgramFiles(x86)%\Internet Explorer\iexplore.exe" >nul 2>&1
+rd /s /q "%ProgramFiles%\Internet Explorer" >nul 2>&1
+rd /s /q "%ProgramFiles(x86)%\Internet Explorer" >nul 2>&1
+del /f /q "%WINDIR%\System32\ie4uinit.exe" >nul 2>&1
+del /f /q "%WINDIR%\SysWOW64\ie4uinit.exe" >nul 2>&1
 
 bcdedit /set {current} debug off >nul 2>&1
 bcdedit /set {current} bootdebug off >nul 2>&1
@@ -1949,6 +2022,22 @@ if (-not $SkipValidation) {
         # 91. Svchost LocalService WpcMonSvc Unbound
         $svchostLS = (Get-Item "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost").GetValue("LocalService")
         Assert-Check -Name "Svchost LocalService WpcMonSvc Unbound" -Pass ($svchostLS -notcontains "WpcMonSvc") -Detail "Unbound from svchost group"
+
+        # 92. IE StartMenuInternet Purged
+        $ieSmi = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE`" 2>nul"
+        Assert-Check -Name "IE StartMenuInternet Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from StartMenuInternet"
+
+        # 93. IE Active Setup Native Purged
+        $ieAs64 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Active Setup\Installed Components\{89820200-ECBD-11cf-8B85-00AA005B4383}`" 2>nul"
+        Assert-Check -Name "IE Active Setup Native Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Active Setup"
+
+        # 94. IE Active Setup WOW64 Purged
+        $ieAs32 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\WOW6432Node\Microsoft\Active Setup\Installed Components\{89820200-ECBD-11cf-8B85-00AA005B4383}`" 2>nul"
+        Assert-Check -Name "IE Active Setup WOW64 Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from WOW64 Active Setup"
+
+        # 95. IE App Paths Native Purged
+        $ieAp64 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\iexplore.exe`" 2>nul"
+        Assert-Check -Name "IE App Paths Native Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from App Paths"
     }
     finally {
         # Unload validation hives
@@ -1957,189 +2046,210 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 92. Defender Driver WdFilter.sys
+    # 96. Defender Driver WdFilter.sys
     Assert-Check -Name "Defender Driver WdFilter.sys" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\WdFilter.sys")) -Detail "Deleted"
 
-    # 93. Defender SecurityHealthSystray
+    # 97. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 94. Firewall Binary mpssvc.dll Intact
+    # 98. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 95. Firewall MMC wf.msc Intact
+    # 99. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 96. .NET NativeImages 64 Cache
+    # 100. .NET NativeImages 64 Cache
     Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
 
-    # 97. .NET NativeImages 32 Cache
+    # 101. .NET NativeImages 32 Cache
     Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
 
-    # 98. .NET GAC_MSIL Preserved
+    # 102. .NET GAC_MSIL Preserved
     Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
 
-    # 99. WinSAT Binary System32 Deleted
+    # 103. WinSAT Binary System32 Deleted
     Assert-Check -Name "WinSAT Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\WinSAT.exe")) -Detail "Deleted"
 
-    # 100. WinSAT Performance Directory Purged
+    # 104. WinSAT Performance Directory Purged
     Assert-Check -Name "WinSAT Performance Directory" -Pass (-not (Test-Path "$MountDir\Windows\Performance\WinSAT")) -Detail "Purged"
 
-    # 101. System Monitor sysmon.ocx Deleted
+    # 105. System Monitor sysmon.ocx Deleted
     Assert-Check -Name "System Monitor sysmon.ocx" -Pass (-not (Test-Path "$MountDir\Windows\System32\sysmon.ocx")) -Detail "Deleted"
 
-    # 102. Performance Monitor perfmon.exe Deleted
+    # 106. Performance Monitor perfmon.exe Deleted
     Assert-Check -Name "Performance Monitor perfmon.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\perfmon.exe")) -Detail "Deleted"
 
-    # 103. Resource Monitor resmon.exe Preserved
+    # 107. Resource Monitor resmon.exe Preserved
     Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
 
-    # 104. Kernel Debug Transport kdnet.dll Deleted
+    # 108. Kernel Debug Transport kdnet.dll Deleted
     Assert-Check -Name "Kernel Debug Transport kdnet.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\kdnet.dll")) -Detail "Deleted"
 
-    # 105. Kernel Debug DriverStore kdnic Purged
+    # 109. Kernel Debug DriverStore kdnic Purged
     $kdnicCount = (Get-ChildItem -Path "$MountDir\Windows\System32\DriverStore\FileRepository" -Filter "kdnic*.inf_*" -Directory -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "Kernel Debug DriverStore kdnic" -Pass ($kdnicCount -eq 0) -Detail "Purged"
 
-    # 106. Kernel Debug Stub kdcom.dll Preserved
+    # 110. Kernel Debug Stub kdcom.dll Preserved
     Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
 
-    # 107. CoreAI SystemApp Purged
+    # 111. CoreAI SystemApp Purged
     $coreAiRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CoreAI_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "CoreAI SystemApp Purged" -Pass ($coreAiRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 108. CoreAI onnxruntime.dll Deleted
+    # 112. CoreAI onnxruntime.dll Deleted
     Assert-Check -Name "CoreAI onnxruntime.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\onnxruntime.dll")) -Detail "Deleted"
 
-    # 109. Base Client.CBS Preserved
+    # 113. Base Client.CBS Preserved
     $cbsRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CBS_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Base Client.CBS Preserved" -Pass ($cbsRem.Count -gt 0) -Detail "Intact (Taskbar/Explorer preserved)"
 
-    # 110. Copilot SystemApps Purged
+    # 114. Copilot SystemApps Purged
     $copilotSysRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*Copilot*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Copilot SystemApps Purged" -Pass ($copilotSysRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 111. Copilot WindowsApps Purged
+    # 115. Copilot WindowsApps Purged
     $copilotWinRem = Get-ChildItem -Path "$MountDir\Program Files\WindowsApps" -Filter "*Copilot*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Copilot WindowsApps Purged" -Pass ($copilotWinRem.Count -eq 0) -Detail "Purged from Program Files\WindowsApps"
 
-    # 112. ParentalControls SystemApp Purged
+    # 116. ParentalControls SystemApp Purged
     $pcSysRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*ParentalControls*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "ParentalControls SystemApp Purged" -Pass ($pcSysRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 113. MicrosoftFamily WindowsApps Purged
+    # 117. MicrosoftFamily WindowsApps Purged
     $famWinRem = Get-ChildItem -Path "$MountDir\Program Files\WindowsApps" -Filter "*MicrosoftFamily*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "MicrosoftFamily WindowsApps Purged" -Pass ($famWinRem.Count -eq 0) -Detail "Purged from Program Files\WindowsApps"
 
-    # 114. ParentalControls Wpc.dll Deleted
+    # 118. ParentalControls Wpc.dll Deleted
     Assert-Check -Name "ParentalControls Wpc.dll Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\Wpc.dll")) -Detail "Deleted"
 
-    # 115. ParentalControls SysWOW64 Wpc.dll Deleted
+    # 119. ParentalControls SysWOW64 Wpc.dll Deleted
     Assert-Check -Name "ParentalControls SysWOW64 Wpc.dll Deleted" -Pass (-not (Test-Path "$MountDir\Windows\SysWOW64\Wpc.dll")) -Detail "Deleted"
 
-    # 116. FamilySafetyExt.dll System32 Deleted
+    # 120. FamilySafetyExt.dll System32 Deleted
     Assert-Check -Name "FamilySafetyExt.dll System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\FamilySafetyExt.dll")) -Detail "Deleted"
 
-    # 117. FamilySafetyExt.dll SysWOW64 Deleted
+    # 121. FamilySafetyExt.dll SysWOW64 Deleted
     Assert-Check -Name "FamilySafetyExt.dll SysWOW64 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\SysWOW64\FamilySafetyExt.dll")) -Detail "Deleted"
 
-    # 118. Narrator Binary System32 Deleted
+    # 122. IE 64-bit Directory Purged
+    Assert-Check -Name "IE 64-bit Directory Purged" -Pass (-not (Test-Path "$MountDir\Program Files\Internet Explorer")) -Detail "Purged from Program Files"
+
+    # 123. IE 32-bit Directory Purged
+    Assert-Check -Name "IE 32-bit Directory Purged" -Pass (-not (Test-Path "$MountDir\Program Files (x86)\Internet Explorer")) -Detail "Purged from Program Files (x86)"
+
+    # 124. IE ie4uinit.exe System32 Deleted
+    Assert-Check -Name "IE ie4uinit.exe System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\ie4uinit.exe")) -Detail "Deleted"
+
+    # 125. IE ieUnatt.exe System32 Deleted
+    Assert-Check -Name "IE ieUnatt.exe System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\ieUnatt.exe")) -Detail "Deleted"
+
+    # 126. IE ieUnatt.exe SysWOW64 Deleted
+    Assert-Check -Name "IE ieUnatt.exe SysWOW64 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\SysWOW64\ieUnatt.exe")) -Detail "Deleted"
+
+    # 127. MSHTML Engine System32 Preserved
+    Assert-Check -Name "MSHTML Engine System32 Preserved" -Pass (Test-Path "$MountDir\Windows\System32\mshtml.dll") -Detail "Intact (COM WebBrowser control preserved)"
+
+    # 128. MSHTML Engine SysWOW64 Preserved
+    Assert-Check -Name "MSHTML Engine SysWOW64 Preserved" -Pass (Test-Path "$MountDir\Windows\SysWOW64\mshtml.dll") -Detail "Intact (32-bit COM WebBrowser control preserved)"
+
+    # 129. Narrator Binary System32 Deleted
     Assert-Check -Name "Narrator Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\Narrator.exe")) -Detail "Deleted"
 
-    # 119. NarratorMCAT Directory Purged
+    # 130. NarratorMCAT Directory Purged
     Assert-Check -Name "NarratorMCAT Directory" -Pass (-not (Test-Path "$MountDir\Windows\System32\NarratorMCAT")) -Detail "Purged"
 
-    # 120. NarratorQuickStart SystemApp Purged
+    # 131. NarratorQuickStart SystemApp Purged
     $narratorAppCount = (Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*microsoft.windows.narratorquickstart*" -Directory -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "NarratorQuickStart SystemApp Purged" -Pass ($narratorAppCount -eq 0) -Detail "Purged from SystemApps"
 
-    # 121. Add Folder Suggestions SystemApp Purged
+    # 132. Add Folder Suggestions SystemApp Purged
     $fsAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*AddSuggestedFoldersToLibraryDialog*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Add Folder Suggestions SystemApp Purged" -Pass ($fsAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 122. PinningConfirmationDialog SystemApp Purged
+    # 133. PinningConfirmationDialog SystemApp Purged
     $pinningAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*Microsoft.Windows.PinningConfirmationDialog*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "PinningConfirmationDialog SystemApp Purged" -Pass ($pinningAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 123. File Explorer (Legacy) SystemApp Purged
+    # 134. File Explorer (Legacy) SystemApp Purged
     $feAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "Microsoft.Windows.FileExplorer_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "File Explorer (Legacy) SystemApp Purged" -Pass ($feAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 124. AppResolverUX SystemApp Purged
+    # 135. AppResolverUX SystemApp Purged
     $arAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*Microsoft.Windows.AppResolverUX*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "AppResolverUX SystemApp Purged" -Pass ($arAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 125. Classic Open With Binary openwith.exe Preserved
+    # 136. Classic Open With Binary openwith.exe Preserved
     Assert-Check -Name "Classic openwith.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\openwith.exe") -Detail "Intact (Classic Win32 dialog fallback)"
 
-    # 126. OneDrive Tasks Directory Purged
+    # 137. OneDrive Tasks Directory Purged
     Assert-Check -Name "OneDrive Tasks Directory Purged" -Pass (-not (Test-Path "$MountDir\Windows\System32\Tasks\Microsoft\Windows\OneDrive")) -Detail "Purged from System32\Tasks"
 
-    # 127. RetailDemo CloudExperienceHost Purged
+    # 138. RetailDemo CloudExperienceHost Purged
     Assert-Check -Name "RetailDemo CloudExperienceHost Purged" -Pass (-not (Test-Path "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy\RetailDemo")) -Detail "Purged from CloudExperienceHost"
 
-    # 128. SetupAPI Logs Purged
+    # 139. SetupAPI Logs Purged
     $setupapiCount = (Get-ChildItem "$MountDir\Windows\inf" -Filter "setupapi*.log" -File -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "SetupAPI Logs Purged" -Pass ($setupapiCount -eq 0) -Detail "setupapi*.log purged from Windows\inf"
 
-    # 129. Windows Temp Empty
+    # 140. Windows Temp Empty
     $winTempCount = (Get-ChildItem "$MountDir\Windows\Temp" -Recurse -File -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "Windows Temp Empty" -Pass ($winTempCount -eq 0) -Detail "No temporary files remaining in Windows\Temp"
 
-    # 130. Windows Temp Directory Exists
+    # 141. Windows Temp Directory Exists
     Assert-Check -Name "Windows Temp Directory Exists" -Pass (Test-Path "$MountDir\Windows\Temp") -Detail "Root directory anchor preserved"
 
-    # 131. WinSxS Backup Empty
+    # 142. WinSxS Backup Empty
     $wsbCount = (Get-ChildItem -Path "$MountDir\Windows\WinSxS\Backup" -Recurse -File -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "WinSxS Backup Empty" -Pass ($wsbCount -eq 0) -Detail "All backup manifests and catalogs purged"
 
-    # 132. WinSxS Backup Directory Exists
+    # 143. WinSxS Backup Directory Exists
     Assert-Check -Name "WinSxS Backup Directory Exists" -Pass (Test-Path "$MountDir\Windows\WinSxS\Backup") -Detail "Root servicing directory anchor preserved"
 
-    # 133. CBS Logs Purged
+    # 144. CBS Logs Purged
     Assert-Check -Name "CBS Logs Purged" -Pass (-not (Test-Path "$MountDir\Windows\Logs\CBS\CBS.log")) -Detail "CBS.log deleted"
 
-    # 134. Panther Directory Purged
+    # 145. Panther Directory Purged
     Assert-Check -Name "Panther Directory Purged" -Pass (-not (Test-Path "$MountDir\Windows\Panther")) -Detail "Windows\Panther directory purged"
 
-    # 135. DeviceCensus Binary System32 Deleted
+    # 146. DeviceCensus Binary System32 Deleted
     Assert-Check -Name "DeviceCensus Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\DeviceCensus.exe")) -Detail "Deleted"
 
-    # 136. invagent Binary System32 Deleted
+    # 147. invagent Binary System32 Deleted
     Assert-Check -Name "invagent Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\invagent.dll")) -Detail "Deleted"
 
-    # 137. appraiser Binary System32 Deleted
+    # 148. appraiser Binary System32 Deleted
     Assert-Check -Name "appraiser Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\appraiser.dll")) -Detail "Deleted"
 
-    # 138. Appraiser Directory System32 Purged
+    # 149. Appraiser Directory System32 Purged
     Assert-Check -Name "Appraiser Directory System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\appraiser")) -Detail "Purged"
 
-    # 139. WerFault.exe System32 Deleted
+    # 150. WerFault.exe System32 Deleted
     Assert-Check -Name "WerFault.exe System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\WerFault.exe")) -Detail "Deleted"
 
-    # 140. WerFault.exe SysWOW64 Deleted
+    # 151. WerFault.exe SysWOW64 Deleted
     Assert-Check -Name "WerFault.exe SysWOW64 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\SysWOW64\WerFault.exe")) -Detail "Deleted"
 
-    # 141. wermgr.exe System32 Deleted
+    # 152. wermgr.exe System32 Deleted
     Assert-Check -Name "wermgr.exe System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\wermgr.exe")) -Detail "Deleted"
 
-    # 142. wersvc.dll System32 Deleted
+    # 153. wersvc.dll System32 Deleted
     Assert-Check -Name "wersvc.dll System32 Deleted" -Pass (-not (Test-Path "$MountDir\Windows\System32\wersvc.dll")) -Detail "Deleted"
 
-    # 143. Region Policy In-Place Patch
+    # 154. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 144. OEMDefaultAssociations.xml
+    # 155. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 145. Notepad.lnk
+    # 156. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 146. SetupComplete.cmd Exists
+    # 157. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 147. SetupComplete.cmd Has Self-Delete
+    # 158. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
