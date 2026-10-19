@@ -146,11 +146,7 @@ if (Test-Path $perfmonShortcut) {
 }
 
 Remove-ScheduledTask "\Microsoft\Windows\PLA"
-
-$loggers = @("Circular Kernel Context Logger", "EventLog-System", "Diagtrack-Listener")
-foreach ($log in $loggers) {
-    Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\$log"
-}
+Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\Diagtrack-Listener"
 Write-Success "Purged PerfMon binaries, shortcuts, PLA tasks, and WMI AutoLoggers."
 
 Write-Step "Purging Windows System Assessment Tool (WinSAT)..."
