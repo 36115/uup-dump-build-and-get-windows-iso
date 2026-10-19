@@ -566,6 +566,41 @@ function Remove-OfflineSystemApp {
     }
 }
 
+function Enable-WorldwideEdgeUninstall {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir
+    )
+    $policyPath = "$MountDir\Windows\System32\IntegratedServicesRegionPolicySet.json"
+    if (Test-Path $policyPath) {
+        & takeown.exe /f $policyPath /a *> $null
+        & icacls.exe $policyPath /grant *S-1-5-32-544:F *> $null
+
+        $rawPolicy = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
+        try {
+            $polObj = $rawPolicy | ConvertFrom-Json
+            foreach ($p in $polObj.policies) {
+                if ($p.name -eq 'Edge_UninstallEdge' -or $p.guid -eq '{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6}' -or $p.'$comment' -match 'Edge is uninstallable') {
+                    $p.defaultState = 'enabled'
+                }
+            }
+            $patchedPolicy = $polObj | ConvertTo-Json -Depth 10
+        } catch {
+            $patchedPolicy = [regex]::Replace(
+                $rawPolicy,
+                '("name"\s*:\s*"Edge_UninstallEdge"[\s\S]*?"defaultState"\s*:\s*")([^"]+)(")',
+                '${1}enabled${3}'
+            )
+        }
+        [System.IO.File]::WriteAllText($policyPath, $patchedPolicy, [System.Text.Encoding]::UTF8)
+        & icacls.exe $policyPath /setowner "NT SERVICE\TrustedInstaller" *> $null
+        Write-Success "Edge_UninstallEdge set to 'enabled' in-place. All other policies preserved."
+    } else {
+        Write-Info "IntegratedServicesRegionPolicySet.json not found."
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
