@@ -91,12 +91,13 @@ function Remove-ForceFile([string]$targetFile) {
 }
 
 # -------------------------------------------------------------
-# STEP 1: Feature Removals via DISM (Recall)
+# STEP 1: Feature Removals via DISM (Recall & Remote Desktop)
 # -------------------------------------------------------------
-Write-Step "[1/9] Removing Optional Features (Recall)..."
+Write-Step "[1/10] Removing Optional Features (Recall & Remote Desktop)..."
 
 $featuresToRemove = @(
-    "Recall"
+    "Recall",
+    "Microsoft-RemoteDesktopConnection"
 )
 foreach ($feat in $featuresToRemove) {
     Write-Info "Disabling and removing feature payload: $feat"
@@ -348,6 +349,17 @@ $shortcut.Save()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
 Write-Success "Created shortcut: $accDir\Notepad.lnk"
 
+# Remove Remote Desktop Connection shortcuts if present
+$rdcShortcuts = @(
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Remote Desktop Connection.lnk",
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Remote Desktop Connection.lnk"
+)
+foreach ($lnk in $rdcShortcuts) {
+    if (Test-Path $lnk) {
+        Remove-ForceFile $lnk
+        Write-Success "Deleted shortcut: $(Split-Path $lnk -Leaf)"
+    }
+}
 
 # -------------------------------------------------------------
 # STEP 9: Generate Self-Deleting SetupComplete.cmd
@@ -413,6 +425,10 @@ if (-not $SkipValidation) {
     $recallOk = (($dismFeat -match 'State\s*:\s*Disabled') -or ($dismFeat -match 'Payload Removed'))
     Assert-Check -Name "Recall Feature Removed" -Pass ($recallOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
 
+    # 2. Remote Desktop Connection feature
+    $dismRdc = & dism.exe /English /Image:$MountDir /Get-FeatureInfo /FeatureName:Microsoft-RemoteDesktopConnection 2>&1
+    $rdcOk = (($dismRdc -match 'State\s*:\s*Disabled') -or ($dismRdc -match 'Payload Removed') -or ($LASTEXITCODE -ne 0))
+    Assert-Check -Name "Remote Desktop Connection Removed" -Pass ($rdcOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
 
     # 3. InboxApps
     Assert-Check -Name "InboxApps Purged" -Pass (-not (Test-Path "$MountDir\Windows\InboxApps")) -Detail "Directory does not exist"
@@ -496,6 +512,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 19/19 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 20/20 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
