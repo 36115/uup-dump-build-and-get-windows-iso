@@ -130,12 +130,46 @@ $defenderFolders = @(
     "$MountDir\Program Files\Windows Defender",
     "$MountDir\Program Files (x86)\Windows Defender",
     "$MountDir\ProgramData\Microsoft\Windows Defender",
-    "$MountDir\Windows\System32\drivers\wd"
+    "$MountDir\Windows\System32\drivers\wd",
+    "$MountDir\Windows\System32\SecurityHealth"
 )
 foreach ($dir in $defenderFolders) {
     if (Test-Path $dir) {
         Remove-ForceDirectory $dir
         Write-Success "Deleted: $dir"
+    }
+}
+
+$defenderBinaries = @(
+    # Kernel Drivers
+    "$MountDir\Windows\System32\drivers\WdBoot.sys",
+    "$MountDir\Windows\System32\drivers\WdFilter.sys",
+    "$MountDir\Windows\System32\drivers\WdNisDrv.sys",
+    "$MountDir\Windows\System32\drivers\WdDevFlt.sys",
+
+    # SecurityHealth Binaries
+    "$MountDir\Windows\System32\SecurityHealthService.exe",
+    "$MountDir\Windows\System32\SecurityHealthSystray.exe",
+    "$MountDir\Windows\System32\SecurityHealthHost.exe",
+    "$MountDir\Windows\System32\SecurityHealthAgent.dll",
+    "$MountDir\Windows\System32\SecurityHealthCore.dll",
+    "$MountDir\Windows\System32\SecurityHealthProxyStub.dll",
+    "$MountDir\Windows\System32\SecurityHealthSSO.dll",
+    "$MountDir\Windows\System32\SecurityHealthSsoUdk.dll",
+    "$MountDir\Windows\System32\SecurityHealthUdk.dll",
+
+    # Web Threat Defense Binaries
+    "$MountDir\Windows\System32\webthreatdefsvc.dll",
+    "$MountDir\Windows\System32\webthreatdefusersvc.dll",
+
+    # Security Center UI Binaries
+    "$MountDir\Windows\System32\wscadminui.exe",
+    "$MountDir\Windows\System32\wscui.cpl"
+)
+foreach ($bin in $defenderBinaries) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted Defender binary: $(Split-Path $bin -Leaf)"
     }
 }
 
@@ -234,6 +268,11 @@ try {
         cmd /c "reg delete `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" /f >nul 2>&1"
         Write-Success "Deleted service key: $svc"
     }
+
+    # Delete SecurityHealth tray icon startup from Run keys
+    cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth /f >nul 2>&1"
+    cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth /f >nul 2>&1"
+    Write-Success "Purged SecurityHealth from Run keys."
 
     # 5b. COMPLETELY DELETE TELEMETRY SERVICES
     Write-Info "Deleting Telemetry services from ControlSet001\Services..."
@@ -609,6 +648,10 @@ if (-not $SkipValidation) {
         $langVal3 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut 2>nul"
         $langPass = ($langVal1 -match '0x1') -or ($langVal2 -match 'HttpAcceptLanguageOptOut') -or ($langVal3 -match '0x1')
         Assert-Check -Name "UserHttpAcceptLanguageOptOut=1" -Pass $langPass -Detail "Preserved"
+
+        # 39. SecurityHealth Run Key Purged
+        $shRun = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth 2>nul"
+        Assert-Check -Name "SecurityHealth Run Key Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Software Run key"
     }
     finally {
         # Unload validation hives
@@ -617,21 +660,27 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 39. Region Policy In-Place Patch
+    # 40. Defender Driver WdFilter.sys
+    Assert-Check -Name "Defender Driver WdFilter.sys" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\WdFilter.sys")) -Detail "Deleted"
+
+    # 41. Defender SecurityHealthSystray
+    Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
+
+    # 42. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 40. OEMDefaultAssociations.xml
+    # 43. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 41. Notepad.lnk
+    # 44. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 42. SetupComplete.cmd Exists
+    # 45. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 43. SetupComplete.cmd Has Self-Delete
+    # 46. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
@@ -640,6 +689,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 43/43 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 46/46 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
