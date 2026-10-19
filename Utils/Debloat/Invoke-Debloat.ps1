@@ -356,6 +356,27 @@ try {
         cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\Maintenance\WinSAT`" /f >nul 2>&1"
         cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinSAT`" /f >nul 2>&1"
         Write-Success "Purged WinSAT TaskCache and registry configuration."
+
+        # 5j. PURGE SYSTEM MONITOR (sysmon.ocx) & PERFORMANCE MONITOR (NTLite perfmon)
+        Write-Info "Purging System Monitor (sysmon.ocx) COM classes and PLA tasks..."
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{C4D2D8E0-7E5E-11D0-A3A4-00A0C90348F6}`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\WOW6432Node\CLSID\{C4D2D8E0-7E5E-11D0-A3A4-00A0C90348F6}`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\Sysmon.3`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\Sysmon.1`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\TypeLib\{C4D2D8D0-7E5E-11D0-A3A4-00A0C90348F6}`" /f >nul 2>&1"
+
+        $plaTaskGuid = "{F5CA4ED2-23E2-4BEA-8B5A-1C338018A4B5}"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$plaTaskGuid`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$plaTaskGuid`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\PLA`" /f >nul 2>&1"
+
+        # 5k. DISABLE KERNEL TELEMETRY & DIAGNOSTIC AUTOLOGGERS
+        Write-Info "Disabling kernel telemetry and diagnostic AutoLoggers..."
+        $telemetryLoggers = @("Diagtrack-Listener", "SQMLogger", "DefenderApiLogger", "DefenderAuditLogger")
+        foreach ($logger in $telemetryLoggers) {
+            cmd /c "reg add `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\WMI\Autologger\$logger`" /v Start /t REG_DWORD /d 0 /f >nul 2>&1"
+        }
+        Write-Success "Purged sysmon COM classes, PLA tasks, and disabled telemetry AutoLoggers."
     }
 }
 finally {
@@ -456,6 +477,18 @@ foreach ($lnk in $rdcShortcuts) {
     }
 }
 
+# Remove Performance Monitor shortcuts
+$perfmonShortcuts = @(
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Performance Monitor.lnk",
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows Tools\Performance Monitor.lnk"
+)
+foreach ($lnk in $perfmonShortcuts) {
+    if (Test-Path $lnk) {
+        Remove-ForceFile $lnk
+        Write-Success "Deleted shortcut: $(Split-Path $lnk -Leaf)"
+    }
+}
+
 # -------------------------------------------------------------
 # STEP 9: Generate Self-Deleting SetupComplete.cmd
 # -------------------------------------------------------------
@@ -480,6 +513,7 @@ schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0
 schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 Critical" /f >nul 2>&1
 schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 64 Critical" /f >nul 2>&1
 schtasks /delete /tn "\Microsoft\Windows\Maintenance\WinSAT" /f >nul 2>&1
+schtasks /delete /tn "\Microsoft\Windows\PLA\System\ConvertLogEntries" /f >nul 2>&1
 
 cd /d %SystemDrive%\
 start /b "" cmd /c "ping 127.0.0.1 -n 2 >nul & rd /s /q "%WINDIR%\Setup\Scripts""
@@ -609,6 +643,14 @@ if (-not $SkipValidation) {
         # 41. WinSAT TaskCache Tree Purged
         $wsTree = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\Maintenance\WinSAT`" 2>nul"
         Assert-Check -Name "WinSAT TaskCache Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from TaskCache\Tree"
+
+        # 42. PLA TaskCache Tree Purged
+        $plaTree = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\PLA`" 2>nul"
+        Assert-Check -Name "PLA TaskCache Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from TaskCache\Tree"
+
+        # 43. Telemetry AutoLogger Diagtrack-Listener Start=0
+        $diagVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\WMI\Autologger\Diagtrack-Listener`" /v Start 2>nul"
+        Assert-Check -Name "AutoLogger Diagtrack-Listener Start=0" -Pass ($diagVal -match '0x0') -Detail "Disabled"
     }
     finally {
         # Unload validation hives
@@ -617,45 +659,54 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 42. Defender SecurityHealthSystray
+    # 44. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 43. Firewall Binary mpssvc.dll Intact
+    # 45. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 44. Firewall MMC wf.msc Intact
+    # 46. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 45. .NET NativeImages 64 Cache
+    # 47. .NET NativeImages 64 Cache
     Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
 
-    # 46. .NET NativeImages 32 Cache
+    # 48. .NET NativeImages 32 Cache
     Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
 
-    # 47. .NET GAC_MSIL Preserved
+    # 49. .NET GAC_MSIL Preserved
     Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
 
-    # 48. WinSAT Binary System32 Deleted
+    # 50. WinSAT Binary System32 Deleted
     Assert-Check -Name "WinSAT Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\WinSAT.exe")) -Detail "Deleted"
 
-    # 49. WinSAT Performance Directory Purged
+    # 51. WinSAT Performance Directory Purged
     Assert-Check -Name "WinSAT Performance Directory" -Pass (-not (Test-Path "$MountDir\Windows\Performance\WinSAT")) -Detail "Purged"
 
-    # 50. Region Policy In-Place Patch
+    # 52. System Monitor sysmon.ocx Deleted
+    Assert-Check -Name "System Monitor sysmon.ocx" -Pass (-not (Test-Path "$MountDir\Windows\System32\sysmon.ocx")) -Detail "Deleted"
+
+    # 53. Performance Monitor perfmon.exe Deleted
+    Assert-Check -Name "Performance Monitor perfmon.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\perfmon.exe")) -Detail "Deleted"
+
+    # 54. Resource Monitor resmon.exe Preserved
+    Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
+
+    # 55. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 51. OEMDefaultAssociations.xml
+    # 56. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 52. Notepad.lnk
+    # 57. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 53. SetupComplete.cmd Exists
+    # 58. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 54. SetupComplete.cmd Has Self-Delete
+    # 59. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
