@@ -3,6 +3,7 @@
     Master Offline Windows 11 Debloat & Servicing Engine.
 .DESCRIPTION
     Applies 100% offline debloat to a mounted Windows image:
+    - Purges Defender binaries, folders, drivers, and deletes all 9 Defender services from registry.
     - Deletes telemetry services (DiagTrack, MapsBroker, PhoneSvc) and their binaries.
     - Configures custom services (PlugPlay=Disabled, Spooler=Manual, lfsvc=Disabled, DPS=Disabled).
     - Applies curated registry pack and TrustedInstaller offline keys via NSudoLC.
@@ -91,12 +92,13 @@ function Remove-ForceFile([string]$targetFile) {
 }
 
 # -------------------------------------------------------------
-# STEP 1: Feature Removals via DISM (Recall & Remote Desktop)
+# STEP 1: Feature Removals via DISM (Recall & Defender Definitions)
 # -------------------------------------------------------------
-Write-Step "[1/10] Removing Optional Features (Recall & Remote Desktop)..."
+Write-Step "[1/11] Removing Optional Features (Recall, Defender Definitions & Remote Desktop)..."
 
 $featuresToRemove = @(
     "Recall",
+    "Windows-Defender-Default-Definitions",
     "Microsoft-RemoteDesktopConnection"
 )
 foreach ($feat in $featuresToRemove) {
@@ -117,6 +119,51 @@ if (Test-Path $inboxApps) {
     Write-Info "Windows\InboxApps already absent."
 }
 
+# -------------------------------------------------------------
+# STEP 3: Purge Windows Defender Folders & Binaries
+# -------------------------------------------------------------
+Write-Step "[3/11] Purging Windows Defender Folders & Binaries..."
+
+$defenderFolders = @(
+    "$MountDir\Program Files\Windows Defender",
+    "$MountDir\Program Files (x86)\Windows Defender",
+    "$MountDir\ProgramData\Microsoft\Windows Defender",
+    "$MountDir\Windows\System32\drivers\wd",
+    "$MountDir\Windows\System32\SecurityHealth"
+)
+foreach ($dir in $defenderFolders) {
+    if (Test-Path $dir) {
+        Remove-ForceDirectory $dir
+        Write-Success "Deleted: $dir"
+    }
+}
+
+$defenderBinaries = @(
+    # SecurityHealth Binaries
+    "$MountDir\Windows\System32\SecurityHealthService.exe",
+    "$MountDir\Windows\System32\SecurityHealthSystray.exe",
+    "$MountDir\Windows\System32\SecurityHealthHost.exe",
+    "$MountDir\Windows\System32\SecurityHealthAgent.dll",
+    "$MountDir\Windows\System32\SecurityHealthCore.dll",
+    "$MountDir\Windows\System32\SecurityHealthProxyStub.dll",
+    "$MountDir\Windows\System32\SecurityHealthSSO.dll",
+    "$MountDir\Windows\System32\SecurityHealthSsoUdk.dll",
+    "$MountDir\Windows\System32\SecurityHealthUdk.dll",
+
+    # Web Threat Defense Binaries
+    "$MountDir\Windows\System32\webthreatdefsvc.dll",
+    "$MountDir\Windows\System32\webthreatdefusersvc.dll",
+
+    # Security Center UI Binaries
+    "$MountDir\Windows\System32\wscadminui.exe",
+    "$MountDir\Windows\System32\wscui.cpl"
+)
+foreach ($bin in $defenderBinaries) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted Defender binary: $(Split-Path $bin -Leaf)"
+    }
+}
 
 # -------------------------------------------------------------
 # STEP 4: Purge Telemetry Binaries
@@ -163,6 +210,22 @@ if (Test-Path $defHive) {
 Write-Success "Loaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
 
 try {
+    # 5a. COMPLETELY DELETE ALL DEFENDER SERVICES
+    Write-Info "Deleting ALL Defender services from ControlSet001\Services..."
+    $defenderServices = @(
+        "WinDefend", "WdBoot", "WdFilter", "WdNisSvc", "WdNisDrv",
+        "SecurityHealthService", "wscsvc", "MDCoreSvc", "webthreatdefsvc"
+    )
+    foreach ($svc in $defenderServices) {
+        cmd /c "reg delete `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" /f >nul 2>&1"
+        Write-Success "Deleted service key: $svc"
+    }
+
+    # Delete SecurityHealth tray icon startup from Run keys
+    cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth /f >nul 2>&1"
+    cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth /f >nul 2>&1"
+    Write-Success "Purged SecurityHealth from Run keys."
+
     # 5b. COMPLETELY DELETE TELEMETRY SERVICES
     Write-Info "Deleting Telemetry services from ControlSet001\Services..."
     $telemetryServices = @("DiagTrack", "MapsBroker", "PhoneSvc")
@@ -433,6 +496,11 @@ if (-not $SkipValidation) {
     # 3. InboxApps
     Assert-Check -Name "InboxApps Purged" -Pass (-not (Test-Path "$MountDir\Windows\InboxApps")) -Detail "Directory does not exist"
 
+    # 4-7. Defender Folders Deleted
+    Assert-Check -Name "Defender Program Files" -Pass (-not (Test-Path "$MountDir\Program Files\Windows Defender")) -Detail "Deleted"
+    Assert-Check -Name "Defender x86" -Pass (-not (Test-Path "$MountDir\Program Files (x86)\Windows Defender")) -Detail "Deleted"
+    Assert-Check -Name "Defender ProgramData" -Pass (-not (Test-Path "$MountDir\ProgramData\Microsoft\Windows Defender")) -Detail "Deleted"
+    Assert-Check -Name "Defender Drivers (wd)" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\wd")) -Detail "Deleted"
 
     # Re-load hives for registry assertions
     cmd /c "reg load HKLM\OFFLINE_SYSTEM `"$sysHive`" >nul 2>&1"
@@ -440,6 +508,11 @@ if (-not $SkipValidation) {
     cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
 
     try {
+        # 12-20. ALL 9 Defender Services Deleted
+        foreach ($svc in $defenderServices) {
+            $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
+            Assert-Check -Name "Defender Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
+        }
 
         # 21-23. Telemetry Services Deleted
         foreach ($svc in $telemetryServices) {
@@ -480,6 +553,9 @@ if (-not $SkipValidation) {
         $langPass = ($langVal1 -match '0x1') -or ($langVal2 -match 'HttpAcceptLanguageOptOut') -or ($langVal3 -match '0x1')
         Assert-Check -Name "UserHttpAcceptLanguageOptOut=1" -Pass $langPass -Detail "Preserved"
 
+        # 37. SecurityHealth Run Key Purged
+        $shRun = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth 2>nul"
+        Assert-Check -Name "SecurityHealth Run Key Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Software Run key"
     }
     finally {
         # Unload validation hives
@@ -488,6 +564,8 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
+    # 38. Defender SecurityHealthSystray
+    Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
     # 39. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
@@ -512,6 +590,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 20/20 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 43/43 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
