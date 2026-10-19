@@ -290,6 +290,34 @@ Get-ChildItem -Path "$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64" -
     Write-Success "Deleted Performance Monitor MUI: $($_.Name)"
 }
 
+# Kernel Debugging Hardware Transports & KDNET (NTLite kerneldebug)
+# Preserves kdcom.dll (mandatory static import for ntoskrnl/winload to avoid STOP 0x6B)
+$kdTransports = @(
+    "$MountDir\Windows\System32\kdnet.dll",
+    "$MountDir\Windows\System32\kdnet_uart16550.dll",
+    "$MountDir\Windows\System32\kdusb.dll",
+    "$MountDir\Windows\System32\kdstub.dll",
+    "$MountDir\Windows\System32\kdcpw.dll",
+    "$MountDir\Windows\System32\kdhvcom.dll",
+    "$MountDir\Windows\System32\kd.dll"
+)
+foreach ($bin in $kdTransports) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted Kernel Debug transport: $(Split-Path $bin -Leaf)"
+    }
+}
+
+Get-ChildItem -Path "$MountDir\Windows\System32" -Filter "kd_*_*.dll" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-ForceFile $_.FullName
+    Write-Success "Deleted Vendor KDNET driver: $($_.Name)"
+}
+
+Get-ChildItem -Path "$MountDir\Windows\System32\DriverStore\FileRepository" -Filter "kdnic*.inf_*" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-ForceDirectory $_.FullName
+    Write-Success "Purged DriverStore KD package: $($_.Name)"
+}
+
 # -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
@@ -648,6 +676,9 @@ schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0
 schtasks /delete /tn "\Microsoft\Windows\Maintenance\WinSAT" /f >nul 2>&1
 schtasks /delete /tn "\Microsoft\Windows\PLA\System\ConvertLogEntries" /f >nul 2>&1
 
+bcdedit /set {current} debug off >nul 2>&1
+bcdedit /set {current} bootdebug off >nul 2>&1
+
 cd /d %SystemDrive%\
 start /b "" cmd /c "ping 127.0.0.1 -n 2 >nul & rd /s /q "%WINDIR%\Setup\Scripts""
 exit
@@ -852,21 +883,31 @@ if (-not $SkipValidation) {
     # 57. Resource Monitor resmon.exe Preserved
     Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
 
-    # 58. Region Policy In-Place Patch
+    # 58. Kernel Debug Transport kdnet.dll Deleted
+    Assert-Check -Name "Kernel Debug Transport kdnet.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\kdnet.dll")) -Detail "Deleted"
+
+    # 59. Kernel Debug DriverStore kdnic Purged
+    $kdnicCount = (Get-ChildItem -Path "$MountDir\Windows\System32\DriverStore\FileRepository" -Filter "kdnic*.inf_*" -Directory -ErrorAction SilentlyContinue).Count
+    Assert-Check -Name "Kernel Debug DriverStore kdnic" -Pass ($kdnicCount -eq 0) -Detail "Purged"
+
+    # 60. Kernel Debug Stub kdcom.dll Preserved
+    Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
+
+    # 61. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 59. OEMDefaultAssociations.xml
+    # 62. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 60. Notepad.lnk
+    # 63. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 61. SetupComplete.cmd Exists
+    # 64. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 62. SetupComplete.cmd Has Self-Delete
+    # 65. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
