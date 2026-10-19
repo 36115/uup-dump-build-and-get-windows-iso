@@ -72,6 +72,26 @@ if (-not $NSudoPath) {
     }
 }
 
+if (-not $RegPackPath -or -not (Test-Path $RegPackPath -PathType Leaf)) {
+    $candReg = Join-Path $PSScriptRoot "Windows-11-REG-Pack-(NoDefender).reg"
+    if (Test-Path $candReg) {
+        $RegPackPath = $candReg
+    }
+}
+
+if (-not $NSudoPath -or -not (Test-Path $NSudoPath -PathType Leaf)) {
+    $candidateNSudos = @(
+        "C:\Users\Administrator\.gemini\antigravity-ide\brain\893a6ed1-892e-4c6e-8de5-eea3f3be87d9\scratch\NSudo Launcher\x64\NSudoLC.exe",
+        "$PSScriptRoot\NSudoLC.exe"
+    )
+    foreach ($cand in $candidateNSudos) {
+        if (Test-Path $cand -PathType Leaf) {
+            $NSudoPath = $cand
+            break
+        }
+    }
+}
+
 Write-Info "Mount Directory : $MountDir"
 Write-Info "Registry Pack   : $RegPackPath"
 Write-Info "NSudo Utility   : $NSudoPath"
@@ -90,6 +110,22 @@ function Remove-ForceFile([string]$targetFile) {
         & takeown.exe /f $targetFile /a *> $null
         & icacls.exe $targetFile /grant *S-1-5-32-544:F /c /q *> $null
         Remove-Item -Path $targetFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-ElevatedRegDelete([string[]]$regKeys) {
+    $validKeys = @($regKeys | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($validKeys.Count -eq 0) { return }
+    if ($NSudoPath -and (Test-Path $NSudoPath)) {
+        $delCmds = ($validKeys | ForEach-Object { "reg delete `"$_`" /f" }) -join "`r`n"
+        $delBatch = Join-Path $env:TEMP "nsudo_reg_del_$([System.Guid]::NewGuid().ToString('N')).cmd"
+        Set-Content -Path $delBatch -Value "@echo off`r`n$delCmds`r`nexit" -Encoding ASCII
+        & $NSudoPath -U:T -P:E -Wait $delBatch *> $null
+        Remove-Item $delBatch -Force -ErrorAction SilentlyContinue
+    } else {
+        foreach ($k in $validKeys) {
+            cmd /c "reg delete `"$k`" /f >nul 2>&1"
+        }
     }
 }
 
@@ -362,6 +398,54 @@ foreach ($d in $coreAiDirs) {
     }
 }
 
+# Narrator & NarratorQuickStart (Narrator Home) (NTLite Narrator)
+# Purges modern AppX Narrator Home, Win32 engine, MathCAT, and localized MUI assets
+$narratorApps = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*microsoft.windows.narratorquickstart*" -Directory -ErrorAction SilentlyContinue
+foreach ($app in $narratorApps) {
+    Remove-ForceDirectory $app.FullName
+    Write-Success "Purged NarratorQuickStart SystemApp: $($app.Name)"
+}
+
+$narratorWinApps = Get-ChildItem -Path "$MountDir\Program Files\WindowsApps" -Filter "*Microsoft.Windows.NarratorQuickStart*" -Directory -ErrorAction SilentlyContinue
+foreach ($app in $narratorWinApps) {
+    Remove-ForceDirectory $app.FullName
+    Write-Success "Purged NarratorQuickStart WindowsApp: $($app.Name)"
+}
+
+$narratorMCAT = "$MountDir\Windows\System32\NarratorMCAT"
+if (Test-Path $narratorMCAT) {
+    Remove-ForceDirectory $narratorMCAT
+    Write-Success "Purged NarratorMCAT directory: $narratorMCAT"
+}
+
+$narratorMedia = "$MountDir\Windows\Media\Narrator"
+if (Test-Path $narratorMedia) {
+    Remove-ForceDirectory $narratorMedia
+    Write-Success "Purged Narrator Media earcons directory: $narratorMedia"
+}
+
+$narratorBinaries = @(
+    "$MountDir\Windows\System32\Narrator.exe",
+    "$MountDir\Windows\System32\NarratorControlTemplates.xml",
+    "$MountDir\Windows\System32\NarratorControlTemplates.xsd",
+    "$MountDir\Windows\System32\NarratorHelper.exe",
+    "$MountDir\Windows\System32\NarratorHook.dll",
+    "$MountDir\Windows\SysWOW64\Narrator.exe",
+    "$MountDir\Windows\SysWOW64\NarratorHelper.exe",
+    "$MountDir\Windows\SysWOW64\NarratorHook.dll"
+)
+foreach ($bin in $narratorBinaries) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted Narrator binary: $(Split-Path $bin -Leaf)"
+    }
+}
+
+Get-ChildItem -Path "$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64" -Filter "Narrator*.mui" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-ForceFile $_.FullName
+    Write-Success "Deleted Narrator MUI: $($_.Name)"
+}
+
 # -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
@@ -491,8 +575,9 @@ try {
         } else {
             Write-Success "Registry pack imported successfully."
         }
+    }
 
-        # 5f. APPLY ConfigureChatAutoInstall VIA NSUDO (TrustedInstaller)
+    # 5f. APPLY ConfigureChatAutoInstall VIA NSUDO (TrustedInstaller)
         if ($NSudoPath -and (Test-Path $NSudoPath)) {
             Write-Info "Applying ConfigureChatAutoInstall = 0 via TrustedInstaller..."
             $chatCmd = "reg add `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Communications`" /v ConfigureChatAutoInstall /t REG_DWORD /d 0 /f"
@@ -544,36 +629,43 @@ try {
             "{A089E292-F4B9-4EB5-A09E-0C4BF448E005}",
             "{C4BB3D7E-BF6E-42EE-B532-1E0832DA3EA9}"
         )
+        $ngenDelKeys = @()
         foreach ($tg in $ngenTaskGuids) {
-            cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$tg`" /f >nul 2>&1"
-            cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Maintenance\$tg`" /f >nul 2>&1"
-            cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$tg`" /f >nul 2>&1"
+            $ngenDelKeys += "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$tg"
+            $ngenDelKeys += "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Maintenance\$tg"
+            $ngenDelKeys += "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$tg"
         }
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\.NET Framework`" /f >nul 2>&1"
+        $ngenDelKeys += "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\.NET Framework"
+        Invoke-ElevatedRegDelete $ngenDelKeys
         Write-Success "Purged .NET Framework NGEN TaskCache registrations."
 
         # 5i. PURGE WINSAT SCHEDULED TASK & REGISTRY STORE (NTLite winsat)
         Write-Info "Purging WinSAT scheduled task & registry store..."
         $winSatTaskGuid = "{731E952A-D01C-4D49-A37F-C8F1396F13B7}"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$winSatTaskGuid`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Maintenance\$winSatTaskGuid`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$winSatTaskGuid`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\Maintenance\WinSAT`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinSAT`" /f >nul 2>&1"
+        $wsDelKeys = @(
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$winSatTaskGuid",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Maintenance\$winSatTaskGuid",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$winSatTaskGuid",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\Maintenance\WinSAT",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinSAT"
+        )
+        Invoke-ElevatedRegDelete $wsDelKeys
         Write-Success "Purged WinSAT TaskCache and registry configuration."
 
         # 5j. PURGE SYSTEM MONITOR (sysmon.ocx) & PERFORMANCE MONITOR (NTLite perfmon)
         Write-Info "Purging System Monitor (sysmon.ocx) COM classes and PLA tasks..."
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{C4D2D8E0-7E5E-11D0-A3A4-00A0C90348F6}`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\WOW6432Node\CLSID\{C4D2D8E0-7E5E-11D0-A3A4-00A0C90348F6}`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\Sysmon.3`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\Sysmon.1`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\TypeLib\{C4D2D8D0-7E5E-11D0-A3A4-00A0C90348F6}`" /f >nul 2>&1"
-
         $plaTaskGuid = "{F5CA4ED2-23E2-4BEA-8B5A-1C338018A4B5}"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$plaTaskGuid`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$plaTaskGuid`" /f >nul 2>&1"
-        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\PLA`" /f >nul 2>&1"
+        $plaDelKeys = @(
+            "HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{C4D2D8E0-7E5E-11D0-A3A4-00A0C90348F6}",
+            "HKLM\OFFLINE_SOFTWARE\Classes\WOW6432Node\CLSID\{C4D2D8E0-7E5E-11D0-A3A4-00A0C90348F6}",
+            "HKLM\OFFLINE_SOFTWARE\Classes\Sysmon.3",
+            "HKLM\OFFLINE_SOFTWARE\Classes\Sysmon.1",
+            "HKLM\OFFLINE_SOFTWARE\Classes\TypeLib\{C4D2D8D0-7E5E-11D0-A3A4-00A0C90348F6}",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$plaTaskGuid",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$plaTaskGuid",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\PLA"
+        )
+        Invoke-ElevatedRegDelete $plaDelKeys
 
         # 5k. DISABLE KERNEL TELEMETRY & DIAGNOSTIC AUTOLOGGERS
         Write-Info "Disabling kernel telemetry and diagnostic AutoLoggers..."
@@ -596,8 +688,29 @@ try {
         cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f >nul 2>&1"
         cmd /c "reg add `"HKU\OFFLINE_DEFAULT\Software\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f >nul 2>&1"
         Write-Success "Purged CoreAI InboxApplications and enforced WindowsAI/Copilot disabled policies."
+
+        # 5m. PURGE NARRATOR ASSISTIVE TECHNOLOGY (AT) & APPX REGISTRATIONS (NTLite Narrator)
+        Write-Info "Purging Narrator Assistive Technology (AT) and AppX registrations..."
+        $narratorDelKeys = @(
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Accessibility\ATs\Narrator",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Accessibility\ATs\narrator"
+        )
+
+        $inboxNarrator = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"NarratorQuickStart`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $inboxNarrator) {
+            $narratorDelKeys += $line.Line.Trim()
+        }
+        $appsNarrator = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Applications`" /f `"NarratorQuickStart`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $appsNarrator) {
+            $narratorDelKeys += $line.Line.Trim()
+        }
+        $deproNarrator = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned`" /f `"NarratorQuickStart`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $deproNarrator) {
+            $narratorDelKeys += $line.Line.Trim()
+        }
+        Invoke-ElevatedRegDelete $narratorDelKeys
+        Write-Success "Purged Narrator ATs registration and NarratorQuickStart AppxAllUserStore entries."
     }
-}
 finally {
     # Unload hives safely
     [System.GC]::Collect()
@@ -756,10 +869,10 @@ if (-not $SkipCleanup) {
 }
 
 # -------------------------------------------------------------
-# STEP 11: 40-Point Automated Quality Gate / Validation
+# STEP 11: 76-Point Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 40-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 76-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -899,7 +1012,7 @@ if (-not $SkipValidation) {
         Assert-Check -Name "AutoLogger Diagtrack-Listener Start=0" -Pass ($diagVal -match '0x0') -Detail "Disabled"
 
         # 46. CoreAI InboxApplications Purged
-        $coreAiReg = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"MicrosoftWindows.Client.CoreAI`" 2>nul" | Select-String "HKEY_"
+        $coreAiReg = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"MicrosoftWindows.Client.CoreAI`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "CoreAI InboxApplications Purged" -Pass ($coreAiReg.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
         # 47. WindowsAI Policy DisableAIDataAnalysis=1
@@ -909,6 +1022,14 @@ if (-not $SkipValidation) {
         # 48. WindowsCopilot Policy TurnOffWindowsCopilot=1
         $copilotVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot 2>nul"
         Assert-Check -Name "WindowsCopilot TurnOffWindowsCopilot=1" -Pass ($copilotVal -match '0x1') -Detail "Applied"
+
+        # 49. Narrator AT Registration Purged
+        $narratorAt = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Accessibility\ATs\Narrator`" 2>nul"
+        Assert-Check -Name "Narrator AT Registration Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Accessibility\ATs"
+
+        # 50. NarratorQuickStart InboxApplications Purged
+        $narratorAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"NarratorQuickStart`" 2>nul" | Select-String "HKEY_")
+        Assert-Check -Name "NarratorQuickStart InboxApplications Purged" -Pass ($narratorAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
     }
     finally {
         # Unload validation hives
@@ -917,78 +1038,88 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 49. Defender Driver WdFilter.sys
+    # 51. Defender Driver WdFilter.sys
     Assert-Check -Name "Defender Driver WdFilter.sys" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\WdFilter.sys")) -Detail "Deleted"
 
-    # 50. Defender SecurityHealthSystray
+    # 52. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 51. Firewall Binary mpssvc.dll Intact
+    # 53. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 52. Firewall MMC wf.msc Intact
+    # 54. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 53. .NET NativeImages 64 Cache
+    # 55. .NET NativeImages 64 Cache
     Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
 
-    # 54. .NET NativeImages 32 Cache
+    # 56. .NET NativeImages 32 Cache
     Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
 
-    # 55. .NET GAC_MSIL Preserved
+    # 57. .NET GAC_MSIL Preserved
     Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
 
-    # 56. WinSAT Binary System32 Deleted
+    # 58. WinSAT Binary System32 Deleted
     Assert-Check -Name "WinSAT Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\WinSAT.exe")) -Detail "Deleted"
 
-    # 57. WinSAT Performance Directory Purged
+    # 59. WinSAT Performance Directory Purged
     Assert-Check -Name "WinSAT Performance Directory" -Pass (-not (Test-Path "$MountDir\Windows\Performance\WinSAT")) -Detail "Purged"
 
-    # 58. System Monitor sysmon.ocx Deleted
+    # 60. System Monitor sysmon.ocx Deleted
     Assert-Check -Name "System Monitor sysmon.ocx" -Pass (-not (Test-Path "$MountDir\Windows\System32\sysmon.ocx")) -Detail "Deleted"
 
-    # 59. Performance Monitor perfmon.exe Deleted
+    # 61. Performance Monitor perfmon.exe Deleted
     Assert-Check -Name "Performance Monitor perfmon.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\perfmon.exe")) -Detail "Deleted"
 
-    # 60. Resource Monitor resmon.exe Preserved
+    # 62. Resource Monitor resmon.exe Preserved
     Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
 
-    # 61. Kernel Debug Transport kdnet.dll Deleted
+    # 63. Kernel Debug Transport kdnet.dll Deleted
     Assert-Check -Name "Kernel Debug Transport kdnet.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\kdnet.dll")) -Detail "Deleted"
 
-    # 62. Kernel Debug DriverStore kdnic Purged
+    # 64. Kernel Debug DriverStore kdnic Purged
     $kdnicCount = (Get-ChildItem -Path "$MountDir\Windows\System32\DriverStore\FileRepository" -Filter "kdnic*.inf_*" -Directory -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "Kernel Debug DriverStore kdnic" -Pass ($kdnicCount -eq 0) -Detail "Purged"
 
-    # 63. Kernel Debug Stub kdcom.dll Preserved
+    # 65. Kernel Debug Stub kdcom.dll Preserved
     Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
 
-    # 64. CoreAI SystemApp Purged
+    # 66. CoreAI SystemApp Purged
     $coreAiRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CoreAI_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "CoreAI SystemApp Purged" -Pass ($coreAiRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 65. CoreAI onnxruntime.dll Deleted
+    # 67. CoreAI onnxruntime.dll Deleted
     Assert-Check -Name "CoreAI onnxruntime.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\onnxruntime.dll")) -Detail "Deleted"
 
-    # 66. Base Client.CBS Preserved
+    # 68. Base Client.CBS Preserved
     $cbsRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CBS_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Base Client.CBS Preserved" -Pass ($cbsRem.Count -gt 0) -Detail "Intact (Taskbar/Explorer preserved)"
 
-    # 67. Region Policy In-Place Patch
+    # 69. Narrator Binary System32 Deleted
+    Assert-Check -Name "Narrator Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\Narrator.exe")) -Detail "Deleted"
+
+    # 70. NarratorMCAT Directory Purged
+    Assert-Check -Name "NarratorMCAT Directory" -Pass (-not (Test-Path "$MountDir\Windows\System32\NarratorMCAT")) -Detail "Purged"
+
+    # 71. NarratorQuickStart SystemApp Purged
+    $narratorAppCount = (Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*microsoft.windows.narratorquickstart*" -Directory -ErrorAction SilentlyContinue).Count
+    Assert-Check -Name "NarratorQuickStart SystemApp Purged" -Pass ($narratorAppCount -eq 0) -Detail "Purged from SystemApps"
+
+    # 72. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 68. OEMDefaultAssociations.xml
+    # 73. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 69. Notepad.lnk
+    # 74. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 70. SetupComplete.cmd Exists
+    # 75. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 71. SetupComplete.cmd Has Self-Delete
+    # 76. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
