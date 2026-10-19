@@ -556,6 +556,13 @@ if (-not $SkipValidation) {
         # 37. SecurityHealth Run Key Purged
         $shRun = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth 2>nul"
         Assert-Check -Name "SecurityHealth Run Key Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Software Run key"
+        # 38. Windows Defender Firewall Service (MpsSvc) Preserved Intact
+        $fwVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\mpssvc`" /v Start 2>nul"
+        Assert-Check -Name "Windows Defender Firewall Service (MpsSvc)" -Pass ($fwVal -match '0x2') -Detail "Preserved (Start=2 Automatic)"
+
+        # 39. Base Filtering Engine Service (BFE) Preserved Intact
+        $bfeVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\bfe`" /v Start 2>nul"
+        Assert-Check -Name "Base Filtering Engine Service (BFE)" -Pass ($bfeVal -match '0x2') -Detail "Preserved (Start=2 Automatic)"
     }
     finally {
         # Unload validation hives
@@ -564,24 +571,30 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 38. Defender SecurityHealthSystray
+    # 40. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 39. Region Policy In-Place Patch
+    # 41. Firewall Binary mpssvc.dll Intact
+    Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
+
+    # 42. Firewall MMC wf.msc Intact
+    Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
+
+    # 43. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 40. OEMDefaultAssociations.xml
+    # 44. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 41. Notepad.lnk
+    # 45. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 42. SetupComplete.cmd Exists
+    # 46. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 43. SetupComplete.cmd Has Self-Delete
+    # 47. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
@@ -590,6 +603,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 43/43 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: $($script:results.Count)/$($script:results.Count) CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
