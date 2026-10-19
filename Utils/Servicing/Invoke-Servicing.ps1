@@ -505,6 +505,62 @@ function Disable-OfflineFeature {
     }
 }
 
+function Remove-OfflineProvisionedAppxPackage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $false)]
+        [string]$PackageName = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$Pattern = ""
+    )
+    if ($PackageName) {
+        try {
+            $null = Remove-AppxProvisionedPackage -Path $MountDir -PackageName $PackageName -ErrorAction Stop
+            Write-Success "Removed provisioned package: $PackageName"
+        } catch {
+            & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$PackageName /NoRestart *> $null
+            Write-Success "Removed provisioned package (dism fallback): $PackageName"
+        }
+    } elseif ($Pattern) {
+        $provInfo = & dism.exe /English /Image:$MountDir /Get-ProvisionedAppxPackages 2>&1
+        $matches = $provInfo | Where-Object { $_ -match '^PackageName\s*:\s*(.*)' }
+        foreach ($line in $matches) {
+            $pkg = ($line -split 'PackageName\s*:\s*')[1].Trim()
+            if ($pkg -like $Pattern) {
+                & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$pkg /NoRestart *> $null
+                Write-Success "Removed provisioned package: $pkg"
+            }
+        }
+    }
+}
+
+function Remove-OfflineSystemApp {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string]$Pattern
+    )
+    $dirs = @(
+        (Join-Path $MountDir "Windows\SystemApps"),
+        (Join-Path $MountDir "Program Files\WindowsApps")
+    )
+    foreach ($baseDir in $dirs) {
+        if (Test-Path $baseDir) {
+            Get-ChildItem -Path $baseDir -Filter $Pattern -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                Remove-ForceDirectory $_.FullName
+                Write-Success "Purged App directory: $($_.Name)"
+            }
+        }
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
