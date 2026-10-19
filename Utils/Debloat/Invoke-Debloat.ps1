@@ -487,6 +487,24 @@ try {
         $folderSuggestDelKeys += "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\StorageSense\FolderSuggestions"
         Invoke-ElevatedRegDelete $folderSuggestDelKeys
         Write-Success "Purged Add Folder Suggestions dialog AppxAllUserStore registrations and task trees."
+
+        # 5o. PURGE PINNING CONFIRMATION DIALOG REGISTRATIONS (NTLite pinningconfirmationdialog)
+        Write-Info "Purging PinningConfirmationDialog AppxAllUserStore registrations..."
+        $pinningDelKeys = @()
+        $inboxPinning = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"PinningConfirmationDialog`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $inboxPinning) {
+            $pinningDelKeys += $line.Line.Trim()
+        }
+        $appsPinning = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Applications`" /f `"PinningConfirmationDialog`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $appsPinning) {
+            $pinningDelKeys += $line.Line.Trim()
+        }
+        $deproPinning = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned`" /f `"PinningConfirmationDialog`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $deproPinning) {
+            $pinningDelKeys += $line.Line.Trim()
+        }
+        Invoke-ElevatedRegDelete $pinningDelKeys
+        Write-Success "Purged PinningConfirmationDialog AppxAllUserStore registrations."
     }
 finally {
     # Unload hives safely
@@ -646,10 +664,10 @@ if (-not $SkipCleanup) {
 }
 
 # -------------------------------------------------------------
-# STEP 11: 78-Point Automated Quality Gate / Validation
+# STEP 11: 80-Point Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 78-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 80-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -787,6 +805,10 @@ if (-not $SkipValidation) {
         # 49. Add Folder Suggestions InboxApp Purged
         $fsAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"F46D4000-FD22-4DB4-AC8E-4E1DDDE828FE`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "Add Folder Suggestions InboxApp Purged" -Pass ($fsAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
+
+        # 50. PinningConfirmationDialog InboxApp Purged
+        $pinningAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"PinningConfirmationDialog`" 2>nul" | Select-String "HKEY_")
+        Assert-Check -Name "PinningConfirmationDialog InboxApp Purged" -Pass ($pinningAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
     }
     finally {
         # Unload validation hives
@@ -795,84 +817,88 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 50. Defender SecurityHealthSystray
+    # 51. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 51. Firewall Binary mpssvc.dll Intact
+    # 52. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 52. Firewall MMC wf.msc Intact
+    # 53. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 53. .NET NativeImages 64 Cache
+    # 54. .NET NativeImages 64 Cache
     Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
 
-    # 54. .NET NativeImages 32 Cache
+    # 55. .NET NativeImages 32 Cache
     Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
 
-    # 55. .NET GAC_MSIL Preserved
+    # 56. .NET GAC_MSIL Preserved
     Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
 
-    # 56. WinSAT Binary System32 Deleted
+    # 57. WinSAT Binary System32 Deleted
     Assert-Check -Name "WinSAT Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\WinSAT.exe")) -Detail "Deleted"
 
-    # 57. WinSAT Performance Directory Purged
+    # 58. WinSAT Performance Directory Purged
     Assert-Check -Name "WinSAT Performance Directory" -Pass (-not (Test-Path "$MountDir\Windows\Performance\WinSAT")) -Detail "Purged"
 
-    # 58. System Monitor sysmon.ocx Deleted
+    # 59. System Monitor sysmon.ocx Deleted
     Assert-Check -Name "System Monitor sysmon.ocx" -Pass (-not (Test-Path "$MountDir\Windows\System32\sysmon.ocx")) -Detail "Deleted"
 
-    # 59. Performance Monitor perfmon.exe Deleted
+    # 60. Performance Monitor perfmon.exe Deleted
     Assert-Check -Name "Performance Monitor perfmon.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\perfmon.exe")) -Detail "Deleted"
 
-    # 60. Resource Monitor resmon.exe Preserved
+    # 61. Resource Monitor resmon.exe Preserved
     Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
 
-    # 61. Kernel Debug Transport kdnet.dll Deleted
+    # 62. Kernel Debug Transport kdnet.dll Deleted
     Assert-Check -Name "Kernel Debug Transport kdnet.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\kdnet.dll")) -Detail "Deleted"
 
-    # 63. Kernel Debug Stub kdcom.dll Preserved
+    # 64. Kernel Debug Stub kdcom.dll Preserved
     Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
 
-    # 64. CoreAI SystemApp Purged    $coreAiRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CoreAI_*" -Directory -ErrorAction SilentlyContinue
-    Assert-Check -Name "CoreAI SystemApp Purged" -Pass ($coreAiRem.Count -eq 0) -Detail "Purged from SystemApps"
+    # 65. CoreAI SystemApp Purged
+    $coreAiRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CoreAI_*" -Directory -ErrorAction SilentlyContinue    Assert-Check -Name "CoreAI SystemApp Purged" -Pass ($coreAiRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 65. CoreAI onnxruntime.dll Deleted
+    # 66. CoreAI onnxruntime.dll Deleted
     Assert-Check -Name "CoreAI onnxruntime.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\onnxruntime.dll")) -Detail "Deleted"
 
-    # 66. Base Client.CBS Preserved
+    # 67. Base Client.CBS Preserved
     $cbsRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CBS_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Base Client.CBS Preserved" -Pass ($cbsRem.Count -gt 0) -Detail "Intact (Taskbar/Explorer preserved)"
 
-    # 67. Narrator Binary System32 Deleted
+    # 68. Narrator Binary System32 Deleted
     Assert-Check -Name "Narrator Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\Narrator.exe")) -Detail "Deleted"
 
-    # 68. NarratorMCAT Directory Purged
+    # 69. NarratorMCAT Directory Purged
     Assert-Check -Name "NarratorMCAT Directory" -Pass (-not (Test-Path "$MountDir\Windows\System32\NarratorMCAT")) -Detail "Purged"
 
-    # 69. NarratorQuickStart SystemApp Purged
+    # 70. NarratorQuickStart SystemApp Purged
     $narratorAppCount = (Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*microsoft.windows.narratorquickstart*" -Directory -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "NarratorQuickStart SystemApp Purged" -Pass ($narratorAppCount -eq 0) -Detail "Purged from SystemApps"
 
-    # 70. Add Folder Suggestions SystemApp Purged
+    # 71. Add Folder Suggestions SystemApp Purged
     $fsAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*AddSuggestedFoldersToLibraryDialog*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Add Folder Suggestions SystemApp Purged" -Pass ($fsAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 71. Region Policy In-Place Patch
+    # 72. PinningConfirmationDialog SystemApp Purged
+    $pinningAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*Microsoft.Windows.PinningConfirmationDialog*" -Directory -ErrorAction SilentlyContinue
+    Assert-Check -Name "PinningConfirmationDialog SystemApp Purged" -Pass ($pinningAppRem.Count -eq 0) -Detail "Purged from SystemApps"
+
+    # 73. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 72. OEMDefaultAssociations.xml
+    # 74. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 73. Notepad.lnk
+    # 75. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 74. SetupComplete.cmd Exists
+    # 76. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 75. SetupComplete.cmd Has Self-Delete
+    # 77. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
