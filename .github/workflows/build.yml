@@ -1,7 +1,7 @@
 name: Build Windows
 run-name: >
   ${{ inputs.versions }}
-  ${{ fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI","HomeSingleLanguage":"HOMESL","Enterprise":"ENTERPRISE","Education":"EDUCATION","ProfessionalWorkstation":"PROWORKSTATION","ProfessionalEducation":"PROEDUCATION","IoTEnterprise":"IOTENTERPRISE","IoTEnterpriseK":"IOTENTERPRISEK","ServerRdsh":"SERVERRDSH"}')[inputs.edition] || inputs.edition }}
+  ${{ (inputs.aio_education || inputs.aio_enterprise || inputs.aio_home || inputs.aio_homesl || inputs.aio_iotenterprise || inputs.aio_iotenterprisek || inputs.aio_pro || inputs.aio_proeducation || inputs.aio_proworkstation || inputs.aio_serverrdsh) && 'CUSTOM-AIO' || inputs.build_all_editions && 'ALL-EDITIONS (AIO)' || fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI","HomeSingleLanguage":"HOMESL","Enterprise":"ENTERPRISE","Education":"EDUCATION","ProfessionalWorkstation":"PROWORKSTATION","ProfessionalEducation":"PROEDUCATION","IoTEnterprise":"IOTENTERPRISE","IoTEnterpriseK":"IOTENTERPRISEK","ServerRdsh":"SERVERRDSH"}')[inputs.edition] || inputs.edition }}
   ${{ fromJSON('{"x64":"X64","arm64":"ARM64"}')[inputs.architecture] }}
   ${{ fromJSON('{
     "Arabic (Saudi Arabia)":"AR","Bulgarian (Bulgaria)":"BG","Czech (Czech Republic)":"CS","Danish (Denmark)":"DA","German (Germany)":"DE","Greek (Greece)":"EL",
@@ -43,8 +43,13 @@ on:
           - Windows Canary
         default: Windows 11 26H2
         required: true
+      build_all_editions:
+        description: "Build All Editions (AIO) using parallel runners"
+        type: boolean
+        default: false
+        required: true
       edition:
-        description: "Windows edition to build"
+        description: "Single edition to build when AIO is not selected (select 'Multi' to build in 1 runner)"
         type: choice
         options:
           - Education
@@ -59,6 +64,56 @@ on:
           - ProfessionalWorkstation
           - ServerRdsh
         default: Pro
+        required: true
+      aio_education:
+        description: "AIO: Education"
+        type: boolean
+        default: false
+        required: true
+      aio_enterprise:
+        description: "AIO: Enterprise"
+        type: boolean
+        default: false
+        required: true
+      aio_home:
+        description: "AIO: Home"
+        type: boolean
+        default: false
+        required: true
+      aio_homesl:
+        description: "AIO: Home Single Language"
+        type: boolean
+        default: false
+        required: true
+      aio_iotenterprise:
+        description: "AIO: IoT Enterprise"
+        type: boolean
+        default: false
+        required: true
+      aio_iotenterprisek:
+        description: "AIO: IoT Enterprise K"
+        type: boolean
+        default: false
+        required: true
+      aio_pro:
+        description: "AIO: Pro"
+        type: boolean
+        default: false
+        required: true
+      aio_proeducation:
+        description: "AIO: Pro Education"
+        type: boolean
+        default: false
+        required: true
+      aio_proworkstation:
+        description: "AIO: Pro for Workstations"
+        type: boolean
+        default: false
+        required: true
+      aio_serverrdsh:
+        description: "AIO: Enterprise multi-session"
+        type: boolean
+        default: false
         required: true
       language:
         description: "Language"
@@ -133,7 +188,9 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build_single:
+    name: Build Single Edition
+    if: ${{ !inputs.build_all_editions && !inputs.aio_education && !inputs.aio_enterprise && !inputs.aio_home && !inputs.aio_homesl && !inputs.aio_iotenterprise && !inputs.aio_iotenterprisek && !inputs.aio_pro && !inputs.aio_proeducation && !inputs.aio_proworkstation && !inputs.aio_serverrdsh }}
     runs-on: ${{ fromJSON('{"x64":"windows-2025","arm64":"windows-11-arm"}')[inputs.architecture] }}
     steps:
       - name: Checkout
@@ -378,7 +435,7 @@ jobs:
           draft: false
           prerelease: ${{ !contains(fromJson('["Windows 10 22H2","Windows 11 23H2","Windows 11 24H2","Windows 11 25H2","Windows 11 26H1","Windows 11 26H2"]'), inputs.versions) }}
           files: |
-            Out/Target/**/$($env:ISO_NAME).zip.0*
+            Out/Target/**/${{ env.ISO_NAME }}.zip.0*
 
       - name: Generate platform packages
         if: ${{ success() }}
@@ -410,6 +467,330 @@ jobs:
             $partsLines += "  out=$($p.Name)"
           }
 
+          & (Join-Path $ws "Build/New-PlatformPackage.ps1") -DistDir $dist -PartsLines $partsLines
+
+      - name: Upload platform ZIPs to Release
+        if: ${{ success() }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ env.tagname }}"
+          if (-not $tag) { $tag = gh release view --json tagName -q '.tagName' }
+          $zip = Join-Path $env:GITHUB_WORKSPACE "dist/isoautodl.zip"
+          if (-not (Test-Path $zip)) { throw "ZIP not found: $zip" }
+          gh release upload $tag "$zip" --clobber
+
+  prepare_aio:
+    name: Prepare AIO Pipeline
+    if: ${{ inputs.build_all_editions || inputs.aio_education || inputs.aio_enterprise || inputs.aio_home || inputs.aio_homesl || inputs.aio_iotenterprise || inputs.aio_iotenterprisek || inputs.aio_pro || inputs.aio_proeducation || inputs.aio_proworkstation || inputs.aio_serverrdsh }}
+    runs-on: windows-2025
+    outputs:
+      matrix_editions: ${{ steps.prep.outputs.matrix_editions }}
+      lang: ${{ steps.prep.outputs.lang }}
+      version: ${{ steps.prep.outputs.version }}
+      options: ${{ steps.prep.outputs.options }}
+      lang_tag: ${{ steps.prep.outputs.lang_tag }}
+    steps:
+      - name: Map AIO inputs
+        id: prep
+        shell: pwsh
+        run: |
+          $langMap = @{
+            'Arabic (Saudi Arabia)'='ar-sa';'Bulgarian (Bulgaria)'='bg-bg';'Czech (Czech Republic)'='cs-cz';'Danish (Denmark)'='da-dk';'German (Germany)'='de-de';'Greek (Greece)'='el-gr';'English (United Kingdom)'='en-gb';'English (United States)'='en-us';'Spanish (Spain)'='es-es';'Spanish (Mexico)'='es-mx';'Estonian (Estonia)'='et-ee';'Finnish (Finland)'='fi-fi';'French (Canada)'='fr-ca';'French (France)'='fr-fr';'Hebrew (Israel)'='he-il';'Croatian (Croatia)'='hr-hr';'Hungarian (Hungary)'='hu-hu';'Italian (Italy)'='it-it';'Japanese (Japan)'='ja-jp';'Korean (Korea)'='ko-kr';'Lithuanian (Lithuania)'='lt-lt';'Latvian (Latvia)'='lv-lv';'Norwegian Bokmål (Norway)'='nb-no';'Dutch (Netherlands)'='nl-nl';'Polish (Poland)'='pl-pl';'Portuguese (Brazil)'='pt-br';'Portuguese (Portugal)'='pt-pt';'Romanian (Romania)'='ro-ro';'Russian (Russia)'='ru-ru';'Slovak (Slovakia)'='sk-sk';'Slovenian (Slovenia)'='sl-si';'Serbian (Latin, Serbia)'='sr-latn-rs';'Swedish (Sweden)'='sv-se';'Thai (Thailand)'='th-th';'Turkish (Turkey)'='tr-tr';'Ukrainian (Ukraine)'='uk-ua';'Chinese (Simplified, China)'='zh-cn';'Chinese (Traditional, Taiwan)'='zh-tw'
+          }
+          $verMap = @{
+            'Windows 10 22H2'                = 'windows-10'
+            'Windows 11 23H2'                = 'windows-11@23h2'
+            'Windows 11 24H2'                = 'windows-11@24h2'
+            'Windows 11 24H2 Beta'           = 'windows-11@24h2_beta'
+            'Windows 11 25H2'                = 'windows-11@25h2'
+            'Windows 11 25H2 Beta'           = 'windows-11@25h2_beta'
+            'Windows 11 26H1'                = 'windows-11@26h1'
+            'Windows 11 26H2'                = 'windows-11@26h2'
+            'Windows 11 26H2 Experimental'   = 'windows-11@26h2_exp'
+            'Windows Dev'                    = 'windows-dev'
+            'Windows Canary'                 = 'windows-canary'
+          }
+          $langTagMap = @{
+            'ar-sa'='AR';'bg-bg'='BG';'cs-cz'='CS';'da-dk'='DA';'de-de'='DE';'el-gr'='EL';'en-gb'='EN';'en-us'='EN';'es-es'='ES';'es-mx'='ES';'et-ee'='ET';'fi-fi'='FI';'fr-ca'='FR';'fr-fr'='FR';'he-il'='HE';'hr-hr'='HR';'hu-hu'='HU';'it-it'='IT';'ja-jp'='JA';'ko-kr'='KO';'lt-lt'='LT';'lv-lv'='LV';'nb-no'='NB';'nl-nl'='NL';'pl-pl'='PL';'pt-br'='PT';'pt-pt'='PT';'ro-ro'='RO';'ru-ru'='RU';'sk-sk'='SK';'sl-si'='SL';'sr-latn-rs'='SR';'sv-se'='SV';'th-th'='TH';'tr-tr'='TR';'uk-ua'='UK';'zh-cn'='ZH';'zh-tw'='ZH'
+          }
+          $langCode = $langMap['${{ inputs.language }}']
+          $verCode  = $verMap['${{ inputs.versions }}']
+          $langTag  = if ($langTagMap.ContainsKey($langCode)) { $langTagMap[$langCode] } else { 'EN' }
+
+          $opts = ''
+          if ('${{ inputs.esd }}' -eq 'true')     { $opts += ' -esd' }
+          if (('${{ inputs.drivers }}' -eq 'true') -and ('${{ inputs.architecture }}' -ne 'arm64')) {
+            $opts += ' -drivers'
+          }
+          if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
+            $opts += ' -profileName "${{ inputs.profile_name }}"'
+          }
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.revision }}')) {
+            $opts += ' -revision "${{ inputs.revision }}"'
+          }
+          $opts = $opts.Trim()
+
+          $selected = @()
+          if ('${{ inputs.aio_education }}' -eq 'true')          { $selected += 'Education' }
+          if ('${{ inputs.aio_enterprise }}' -eq 'true')         { $selected += 'Enterprise' }
+          if ('${{ inputs.aio_home }}' -eq 'true')               { $selected += 'Home' }
+          if ('${{ inputs.aio_homesl }}' -eq 'true')             { $selected += 'HomeSingleLanguage' }
+          if ('${{ inputs.aio_iotenterprise }}' -eq 'true')      { $selected += 'IoTEnterprise' }
+          if ('${{ inputs.aio_iotenterprisek }}' -eq 'true')     { $selected += 'IoTEnterpriseK' }
+          if ('${{ inputs.aio_pro }}' -eq 'true')                { $selected += 'Pro' }
+          if ('${{ inputs.aio_proeducation }}' -eq 'true')       { $selected += 'ProfessionalEducation' }
+          if ('${{ inputs.aio_proworkstation }}' -eq 'true')     { $selected += 'ProfessionalWorkstation' }
+          if ('${{ inputs.aio_serverrdsh }}' -eq 'true')         { $selected += 'ServerRdsh' }
+
+          if ($selected.Count -gt 0) {
+            $editionList = $selected
+          } else {
+            if ($verCode -eq 'windows-10') {
+              $editionList = @('Education', 'Enterprise', 'Home', 'HomeSingleLanguage', 'IoTEnterprise', 'Pro', 'ProfessionalEducation', 'ProfessionalWorkstation', 'ServerRdsh')
+            } else {
+              $editionList = @('Education', 'Enterprise', 'Home', 'HomeSingleLanguage', 'IoTEnterprise', 'IoTEnterpriseK', 'Pro', 'ProfessionalEducation', 'ProfessionalWorkstation', 'ServerRdsh')
+            }
+          }
+          $json = ($editionList | ConvertTo-Json -Compress)
+
+          Write-Host "Target: $verCode | Lang: $langCode | Editions: $json"
+          echo "matrix_editions=$json" >> $env:GITHUB_OUTPUT
+          echo "lang=$langCode"        >> $env:GITHUB_OUTPUT
+          echo "version=$verCode"      >> $env:GITHUB_OUTPUT
+          echo "lang_tag=$langTag"     >> $env:GITHUB_OUTPUT
+          if ($opts) {
+            echo "options=$opts"       >> $env:GITHUB_OUTPUT
+          }
+
+  build_aio_wim:
+    name: Build WIM (${{ matrix.edition }})
+    needs: prepare_aio
+    runs-on: ${{ fromJSON('{"x64":"windows-2025","arm64":"windows-11-arm"}')[inputs.architecture] }}
+    strategy:
+      matrix:
+        edition: ${{ fromJSON(needs.prepare_aio.outputs.matrix_editions) }}
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v8
+        with:
+          persist-credentials: false
+
+      - name: Setup Environment
+        shell: pwsh
+        run: .\Build\Initialize-Environment.ps1
+
+      - name: Build Edition WIM
+        shell: pwsh
+        run: |
+          pwsh uup-dump-get-windows-iso.ps1 ${{ needs.prepare_aio.outputs.version }} Out -architecture ${{ inputs.architecture }} -edition ${{ matrix.edition }} -lang ${{ needs.prepare_aio.outputs.lang }} ${{ needs.prepare_aio.outputs.options }} -wimOnly
+
+      - name: Upload Edition WIM Artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: wim-${{ matrix.edition }}
+          path: |
+            Out/Target/**/*.wim
+            Out/Target/**/*.esd
+            Out/Target/**/*.json
+            Out/Target/**/SourceIso/**
+            Out/Target/**/cdimage.exe
+          if-no-files-found: error
+
+  assemble_aio:
+    name: Assemble AIO ISO
+    needs: [prepare_aio, build_aio_wim]
+    runs-on: ${{ fromJSON('{"x64":"windows-2025","arm64":"windows-11-arm"}')[inputs.architecture] }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download all WIM artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: wim-*
+          path: aio_wims
+          merge-multiple: true
+
+      - name: Assemble All-In-One (AIO) Windows ISO
+        id: assemble_iso
+        shell: pwsh
+        run: |
+          . .\Build\Initialize-Environment.ps1
+          $aioParams = @{
+            WimDirectory         = 'aio_wims'
+            WindowsTargetName    = '${{ needs.prepare_aio.outputs.version }}'
+            DestinationDirectory = 'Out'
+            Architecture         = '${{ inputs.architecture }}'
+          }
+          if ('${{ inputs.esd }}' -eq 'true') { $aioParams['Esd'] = $true }
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
+            $aioParams['ProfileName'] = '${{ inputs.profile_name }}'
+          }
+          New-AioIso @aioParams
+          echo "iso_name=$env:ISO_NAME" >> $env:GITHUB_OUTPUT
+
+      - name: Create split zip
+        shell: pwsh
+        run: |
+          $isoItem = Get-ChildItem -Path "Out/Target" -Filter "*.ISO" -Recurse | Select-Object -First 1
+          $targetDir = $isoItem.DirectoryName
+          7z a -tzip -mx=0 -v1950M -bsp2 "$targetDir/$($env:ISO_NAME).zip" "$($isoItem.FullName)"
+          Get-ChildItem "$targetDir/$($env:ISO_NAME).zip.*" | Sort-Object Name | ForEach-Object { Write-Host "Created: $($_.FullName)" }
+
+      - name: Upload ISO artifact
+        id: upload_iso_artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ env.ISO_NAME }}
+          path: Out/Target/**/*.ISO
+          if-no-files-found: error
+
+      - name: Set artifact_url
+        id: set_artifact_url
+        shell: pwsh
+        run: echo "artifact_url=${{ steps.upload_iso_artifact.outputs.artifact-url }}" >> $env:GITHUB_ENV
+
+      - name: Build summary
+        id: build_summary
+        shell: pwsh
+        run: |
+          $iso = Get-Content (Get-ChildItem -Path 'Out/Target' -Filter '*.json' -Recurse | Select-Object -First 1).FullName | ConvertFrom-Json
+          $imageNames = $iso.images | ForEach-Object { $_.name }
+          if ($imageNames.Count -gt 1) {
+            if ($imageNames[0] -match '^(Windows (10|11))\s*(.*)') {
+              $prefix = $matches[1]
+              $first = $imageNames[0]
+              $rest = $imageNames[1..($imageNames.Count - 1)] | ForEach-Object { ($_ -replace "^$prefix\s*", '') }
+              $finalImageName = $first + '/' + ($rest -join '/')
+            } else {
+              $finalImageName = $imageNames -join '/'
+            }
+          } else {
+            $finalImageName = $imageNames
+          }
+
+          $parts = Get-ChildItem -Path "Out/Target" -Filter "$($env:ISO_NAME).zip.0*" -Recurse | Sort-Object Name
+          $partsList = ($parts | ForEach-Object { $_.Name }) -join '  <br/>'
+
+          # Build config row only when there are any options
+          $opts = '${{ needs.prepare_aio.outputs.options }}'
+          $optsRow = $null
+          if (-not [string]::IsNullOrWhiteSpace($opts)) {
+            $descMap = @{
+              '-esd'     = 'Use ESD compression'
+              '-drivers' = 'Add additional drivers'
+              '-netfx3'  = 'Add .NET Framework 3.5'
+            }
+            $items = $opts -split '\s+' |
+              Where-Object { $_ -and $_.Trim() -ne '' } |
+              ForEach-Object {
+                $k = $_.ToLower()
+                if ($descMap.ContainsKey($k)) { $descMap[$k] } else { $_.TrimStart('-') }
+              } | Select-Object -Unique
+
+            if ($items.Count -gt 0) {
+              $optsFormatted = ($items | ForEach-Object { "<li>$($_)</li>" }) -join ''
+              $optsRow = "| Build config | <ul>$optsFormatted</ul> |"
+            }
+          }
+
+          Add-Content $env:GITHUB_STEP_SUMMARY @"
+          ### FILE INFO:
+          | Property | Value |
+          | :--- | :--- |
+          | Name | $finalImageName $($iso.version) |
+          | Build | $($iso.build) |
+          | Architecture | ${{ inputs.architecture }} |
+          | Language | ${{ inputs.language }} |
+          "@
+
+          if ($optsRow) {
+            Add-Content $env:GITHUB_STEP_SUMMARY $optsRow
+          }
+
+          Add-Content $env:GITHUB_STEP_SUMMARY @"
+          | Checksum | $($iso.checksum) |
+          | Run ID | [#$env:GITHUB_RUN_ID]($env:artifact_url) |
+          | Download | [$env:ISO_NAME](https://nightly.link/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/$($env:ISO_NAME).zip) |
+          "@
+
+          $rlsnfo = @"
+
+          ## RELEASE INFO
+          > [!NOTE]
+          > File is splitted because Github release limit filesize to 2G.
+          > You must download all files **$env:ISO_NAME.zip.xxx** *(where xxx is number of archive)*
+          > If You have all files you can extract files.
+
+          > [!TIP]
+          > For example on windows with 7-Zip:
+          > - Extract (GUI): ``Open **$env:ISO_NAME.zip.001** in 7-Zip and extract.``
+          > - Extract (CLI): ``7z x $env:ISO_NAME.zip.001``
+
+          > [!CAUTION]
+          > Remember on Linux/MacOS set ``chmod +x`` to *.sh file before run!
+          "@
+
+          ((Get-Content $env:GITHUB_STEP_SUMMARY) + "<br/>" + $rlsnfo) | Set-Content summary.md
+          echo "build=$($iso.build)" >> $env:GITHUB_ENV
+          echo "version=$($iso.version)" >> $env:GITHUB_ENV
+          echo "name=$($iso.name)" >> $env:GITHUB_ENV
+          echo "images=$($finalImageName)" >> $env:GITHUB_ENV
+          echo "iso_checksum=$($iso.checksum)" >> $env:GITHUB_ENV
+          $rawTag = "$($iso.build).$($iso.version).AIO.${{ fromJSON('{"x64":"X64","arm64":"ARM64"}')[inputs.architecture] }}.${{ needs.prepare_aio.outputs.lang_tag }}$($iso.tags)"
+          $cleanTag = ($rawTag -replace '\.\.+', '.') -replace '\.+$', ''
+          echo "tagname=$cleanTag" >> $env:GITHUB_ENV
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v3.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "${{ env.tagname }}"
+          name: "${{ env.images }} ${{ inputs.architecture}} ${{ env.version }} (${{ env.build }})"
+          body_path: summary.md
+          draft: false
+          prerelease: ${{ !contains(fromJson('["Windows 10 22H2","Windows 11 23H2","Windows 11 24H2","Windows 11 25H2","Windows 11 26H1","Windows 11 26H2"]'), inputs.versions) }}
+          files: |
+            Out/Target/**/${{ env.ISO_NAME }}.zip.0*
+
+      - name: Generate platform packages
+        if: ${{ success() }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $tag = "${{ env.tagname }}"
+          if (-not $tag) { $tag = gh release view --json tagName -q '.tagName' }
+          if (-not $tag) { throw "Cannot resolve release tag." }
+
+          $owner,$repo = $env:GITHUB_REPOSITORY.Split('/')
+
+          $ws   = $env:GITHUB_WORKSPACE
+          $dist = Join-Path $ws "dist"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+
+          $localParts = Get-ChildItem -Path "Out/Target" -Filter "$($env:ISO_NAME).zip.0*" -Recurse -File | Sort-Object Name
+          if (-not $localParts) { throw "No local split parts found in Out/Target for $($env:ISO_NAME).zip.0*" }
+
+          $partsLines = @()
+          foreach ($p in $localParts) {
+            $sha = (Get-FileHash -Algorithm SHA256 $p.FullName).Hash.ToLowerInvariant()
+            $downloadUrl = "https://github.com/$owner/$repo/releases/download/$tag/$($p.Name)"
+            $partsLines += $downloadUrl
+            $partsLines += "  checksum=sha-256=$sha"
+            $partsLines += "  out=$($p.Name)"
+          }
           & (Join-Path $ws "Build/New-PlatformPackage.ps1") -DistDir $dist -PartsLines $partsLines
 
       - name: Upload platform ZIPs to Release
