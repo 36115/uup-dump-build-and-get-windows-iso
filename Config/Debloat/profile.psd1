@@ -39,5 +39,6 @@
         'OS/Scripts/Optimize-DiskFootprint.ps1'
         'OS/Scripts/Remove-ShellFlyoutsAndAuxiliaryApps.ps1'
         'OS/Scripts/Remove-DefaultAppsAndCapabilities.ps1'
+        'OS/Scripts/Configure-SystemAndFirstBoot.ps1'
     ) | Where-Object { $_ }
 }
