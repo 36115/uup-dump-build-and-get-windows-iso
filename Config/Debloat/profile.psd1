@@ -33,5 +33,6 @@
     Scripts = @(
         'OS/Scripts/Remove-TelemetryAndDiagnostics.ps1'
         'OS/Scripts/Remove-DefenderAndSmartScreen.ps1'
+        'OS/Scripts/Remove-ContentDeliveryManager.ps1'
     ) | Where-Object { $_ }
 }
