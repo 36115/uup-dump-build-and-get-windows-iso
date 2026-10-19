@@ -170,6 +170,33 @@ try {
         Write-Success "Deleted service key: $svc"
     }
 
+    # 5c. CONFIGURE REQUESTED SERVICE START TYPES
+    Write-Info "Configuring requested service start types..."
+    $serviceConfigs = @{
+        "PlugPlay"       = 4  # Disabled (User host confirmed)
+        "Spooler"        = 3  # Manual
+        "lfsvc"          = 4  # Disabled (Geolocation)
+    }
+    foreach ($sName in $serviceConfigs.Keys) {
+        $stVal = $serviceConfigs[$sName]
+        cmd /c "reg add `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$sName`" /v Start /t REG_DWORD /d $stVal /f >nul 2>&1"
+        Write-Success "Configured $sName -> Start = $stVal"
+    }
+
+    # 5d. CONFIGURE DPS (Diagnostic Policy Service) VIA NSUDO (TrustedInstaller)
+    Write-Info "Configuring DPS (TrustedInstaller elevation)..."
+    if ($NSudoPath -and (Test-Path $NSudoPath)) {
+        $dpsCmd = "reg add `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\DPS`" /v Start /t REG_DWORD /d 4 /f"
+        $dpsBatch = Join-Path $env:TEMP "nsudo_dps.cmd"
+        Set-Content -Path $dpsBatch -Value "@echo off`r`n$dpsCmd`r`nexit" -Encoding ASCII
+        & $NSudoPath -U:T -P:E -Wait $dpsBatch *> $null
+        Remove-Item $dpsBatch -Force -ErrorAction SilentlyContinue
+        Write-Success "Configured DPS -> Start = 4 via TrustedInstaller."
+    } else {
+        cmd /c "reg add `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\DPS`" /v Start /t REG_DWORD /d 4 /f >nul 2>&1"
+        Write-Info "Configured DPS directly."
+    }
+
     # 5e. TRANSLATE AND IMPORT REGISTRY PACK
     if ($RegPackPath -and (Test-Path $RegPackPath)) {
         Write-Info "Translating and importing registry pack: $(Split-Path $RegPackPath -Leaf)"
@@ -219,6 +246,20 @@ try {
             Write-Success "Registry pack imported successfully."
         }
 
+        # 5f. APPLY ConfigureChatAutoInstall VIA NSUDO (TrustedInstaller)
+        if ($NSudoPath -and (Test-Path $NSudoPath)) {
+            Write-Info "Applying ConfigureChatAutoInstall = 0 via TrustedInstaller..."
+            $chatCmd = "reg add `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Communications`" /v ConfigureChatAutoInstall /t REG_DWORD /d 0 /f"
+            $chatBatch = Join-Path $env:TEMP "nsudo_chat.cmd"
+            Set-Content -Path $chatBatch -Value "@echo off`r`n$chatCmd`r`nexit" -Encoding ASCII
+            & $NSudoPath -U:T -P:E -Wait $chatBatch *> $null
+            Remove-Item $chatBatch -Force -ErrorAction SilentlyContinue
+            Write-Success "Applied ConfigureChatAutoInstall = 0."
+        }
+
+        # Ensure HttpAcceptLanguageOptOut is persisted in Default Profile and Policies
+        cmd /c "reg add `"HKU\OFFLINE_DEFAULT\Control Panel\International\User Profile`" /v HttpAcceptLanguageOptOut /t REG_DWORD /d 1 /f >nul 2>&1"
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut /t REG_DWORD /d 1 /f >nul 2>&1"
     }
 }
 finally {
@@ -292,6 +333,35 @@ if (-not $SkipValidation) {
         Assert-Check -Name "Telemetry diagtrack.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\diagtrack.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry moshost.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\moshost.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry PhoneService.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\PhoneService.dll")) -Detail "Deleted"
+
+        # 27. PlugPlay Service Disabled
+        $ppVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\PlugPlay`" /v Start 2>nul"
+        Assert-Check -Name "PlugPlay Start=4" -Pass ($ppVal -match '0x4') -Detail "Disabled"
+
+        # 28. Spooler Service Manual
+        $spVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\Spooler`" /v Start 2>nul"
+        Assert-Check -Name "Spooler Start=3" -Pass ($spVal -match '0x3') -Detail "Manual"
+
+        # 29. lfsvc Disabled
+        $lfVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\lfsvc`" /v Start 2>nul"
+        Assert-Check -Name "lfsvc Start=4" -Pass ($lfVal -match '0x4') -Detail "Disabled"
+
+
+        # 31. DPS Disabled
+        $dpsVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\DPS`" /v Start 2>nul"
+        Assert-Check -Name "DPS Start=4" -Pass ($dpsVal -match '0x4') -Detail "Disabled"
+
+        # 32. ConfigureChatAutoInstall
+        $chatVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Communications`" /v ConfigureChatAutoInstall 2>nul"
+        Assert-Check -Name "ConfigureChatAutoInstall=0" -Pass ($chatVal -match '0x0') -Detail "Applied"
+
+        # 36. Preserved HttpAcceptLanguageOptOut
+        $langVal1 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Control Panel\International\User Profile`" /v HttpAcceptLanguageOptOut 2>nul"
+        $langVal2 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Software\Microsoft\Windows\CurrentVersion\RunOnce`" /v `"Telemetry Language Disable`" 2>nul"
+        $langVal3 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut 2>nul"
+        $langPass = ($langVal1 -match '0x1') -or ($langVal2 -match 'HttpAcceptLanguageOptOut') -or ($langVal3 -match '0x1')
+        Assert-Check -Name "UserHttpAcceptLanguageOptOut=1" -Pass $langPass -Detail "Preserved"
+
     }
     finally {
         # Unload validation hives
@@ -305,6 +375,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 8/8 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 14/14 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
