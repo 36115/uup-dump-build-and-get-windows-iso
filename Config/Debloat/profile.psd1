@@ -29,5 +29,7 @@
     ) | Where-Object { $_ }
 
     # Modular servicing scripts to execute
-    Scripts = @() | Where-Object { $_ }
+    Scripts = @(
+        'OS/Scripts/Remove-TelemetryAndDiagnostics.ps1'
+    ) | Where-Object { $_ }
 }
