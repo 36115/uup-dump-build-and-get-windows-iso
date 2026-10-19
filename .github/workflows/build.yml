@@ -211,6 +211,12 @@ jobs:
             echo "options=$opts"   >> $env:GITHUB_OUTPUT
           }
 
+      - name: Configure Runner Defender Exclusions
+        shell: pwsh
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath $env:TEMP, "C:\output", "D:\output", "C:\a", "D:\a" -ErrorAction SilentlyContinue
+
       - name: Build Windows
         id: build_windows
         shell: pwsh
