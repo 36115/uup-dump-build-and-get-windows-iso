@@ -558,6 +558,55 @@ foreach ($app in $appResolverWinApps) {
     Write-Success "Purged AppResolverUX WindowsApp: $($app.Name)"
 }
 
+# Retail Demo Content & Retail Demo Experience (RDX) (NTLite retaildemo)
+# Purges media repositories, demo engine DLLs, and OOBE demo triggers
+$retailDemoDirs = @(
+    "$MountDir\ProgramData\Microsoft\Windows\RetailDemo",
+    "$MountDir\Windows\SystemResources\RetailDemo",
+    "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy\RetailDemo"
+)
+foreach ($dir in $retailDemoDirs) {
+    if (Test-Path $dir) {
+        Remove-ForceDirectory $dir
+        Write-Success "Purged RetailDemo directory: $(Split-Path $dir -Leaf)"
+    }
+}
+
+$retailDemoBinaries = @(
+    "$MountDir\Windows\System32\RDXService.dll",
+    "$MountDir\Windows\System32\RDXTaskFactory.dll",
+    "$MountDir\Windows\System32\Windows.System.Profile.RetailInfo.dll",
+    "$MountDir\Windows\System32\rdx.dll",
+    "$MountDir\Windows\System32\RDXClean.exe",
+    "$MountDir\Windows\System32\RDXTask.dll",
+    "$MountDir\Windows\SysWOW64\Windows.System.Profile.RetailInfo.dll",
+    "$MountDir\Windows\SysWOW64\rdx.dll",
+    "$MountDir\Windows\SysWOW64\RDXClean.exe",
+    "$MountDir\Windows\SysWOW64\RDXTask.dll"
+)
+foreach ($bin in $retailDemoBinaries) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted RetailDemo binary: $(Split-Path $bin -Leaf)"
+    }
+}
+
+Get-ChildItem -Path "$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64" -Filter "*rdx*.mui" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-ForceFile $_.FullName
+    Write-Success "Deleted RetailDemo MUI: $($_.Name)"
+}
+
+Get-ChildItem -Path "$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64" -Filter "*RetailInfo*.mui" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-ForceFile $_.FullName
+    Write-Success "Deleted RetailInfo MUI: $($_.Name)"
+}
+
+$retailDemoTasks = "$MountDir\Windows\System32\Tasks\Microsoft\Windows\RetailDemo"
+if (Test-Path $retailDemoTasks) {
+    Remove-ForceDirectory $retailDemoTasks
+    Write-Success "Purged RetailDemo Tasks directory: $retailDemoTasks"
+}
+
 # -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
@@ -949,6 +998,27 @@ try {
         )
         Invoke-ElevatedRegDelete $oneDriveTaskDelKeys
         Write-Success "Purged OneDrive first-run trigger, unpinned Explorer CLSIDs, and enforced DisableFileSyncNGSC."
+
+        # 5s. PURGE RETAIL DEMO EXPERIENCE (RDX) REGISTRY & ENFORCE POLICY (NTLite retaildemo)
+        Write-Info "Purging Retail Demo Experience (RDX) registry keys and enforcing AllowRetailDemo=0 policy..."
+        $rdxDelKeys = @(
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\RetailDemo",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList\RDX",
+            "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\RetailDemo"
+        )
+        Invoke-ElevatedRegDelete $rdxDelKeys
+
+        # Deprovision RetailDemo InboxApplications from AppxAllUserStore if registered
+        $rdxAppxKeys = @(cmd /c 'reg query "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications" /f "RetailDemo" 2>nul' | Select-String "HKEY_")
+        if ($rdxAppxKeys.Count -gt 0) {
+            $rdxDelAppx = @($rdxAppxKeys | ForEach-Object { ($_.ToString().Trim() -replace 'HKEY_LOCAL_MACHINE\\', 'HKLM\') })
+            Invoke-ElevatedRegDelete $rdxDelAppx
+            Write-Success "Purged RetailDemo InboxApplications registrations."
+        }
+
+        # Enforce AllowRetailDemo=0 policy to prevent any future reactivation
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\RetailDemo`" /v AllowRetailDemo /t REG_DWORD /d 0 /f >nul 2>&1"
+        Write-Success "Retail Demo Experience (RDX) purged and AllowRetailDemo=0 policy enforced."
     }
 finally {
     # Unload hives safely
@@ -1108,11 +1178,10 @@ if (-not $SkipCleanup) {
 }
 
 # -------------------------------------------------------------
-# -------------------------------------------------------------
-# STEP 11: 100-Point Automated Quality Gate / Validation
+# STEP 11: 107-Point Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 100-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 107-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -1149,7 +1218,7 @@ if (-not $SkipValidation) {
     Assert-Check -Name "Defender ProgramData" -Pass (-not (Test-Path "$MountDir\ProgramData\Microsoft\Windows Defender")) -Detail "Deleted"
     Assert-Check -Name "Defender Drivers (wd)" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\wd")) -Detail "Deleted"
 
-    # 8-16. SmartScreen, AppRep, BrowserCore & OneDrive Binaries / Folders Deleted
+    # 8-20. SmartScreen, AppRep, BrowserCore, RetailDemo & OneDrive Binaries / Folders Deleted
     Assert-Check -Name "SmartScreen smartscreen.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\smartscreen.exe")) -Detail "Deleted"
     Assert-Check -Name "SmartScreen smartscreen.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\smartscreen.dll")) -Detail "Deleted"
     Assert-Check -Name "SmartScreen AppRepAgent.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\AppRepAgent.dll")) -Detail "Deleted"
@@ -1158,6 +1227,10 @@ if (-not $SkipValidation) {
     Assert-Check -Name "BrowserCore Directory" -Pass (-not (Test-Path "$MountDir\Windows\BrowserCore")) -Detail "Purged from Windows"
     Assert-Check -Name "BrowserCore Host System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\browsercore.exe")) -Detail "Deleted"
     Assert-Check -Name "BrowserCore Manifest System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\browsercore.json")) -Detail "Deleted"
+    Assert-Check -Name "RetailDemo ProgramData Repository" -Pass (-not (Test-Path "$MountDir\ProgramData\Microsoft\Windows\RetailDemo")) -Detail "Purged"
+    Assert-Check -Name "RetailDemo RDXService.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\RDXService.dll")) -Detail "Deleted"
+    Assert-Check -Name "RetailDemo RDXTaskFactory.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\RDXTaskFactory.dll")) -Detail "Deleted"
+    Assert-Check -Name "RetailDemo RetailInfo.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\Windows.System.Profile.RetailInfo.dll")) -Detail "Deleted"
     Assert-Check -Name "OneDrive System32 Binary" -Pass (-not (Test-Path "$MountDir\Windows\System32\OneDriveSetup.exe")) -Detail "Deleted"
     Assert-Check -Name "OneDrive SysWOW64 Binary" -Pass (-not (Test-Path "$MountDir\Windows\SysWOW64\OneDriveSetup.exe")) -Detail "Deleted"
 
@@ -1167,173 +1240,181 @@ if (-not $SkipValidation) {
     cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
 
     try {
-        # 17-25. ALL 9 Defender Services Deleted
+        # 21-29. ALL 9 Defender Services Deleted
         foreach ($svc in $defenderServices) {
             $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
             Assert-Check -Name "Defender Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
         }
 
-        # 26-28. Telemetry Services Deleted
+        # 30-32. Telemetry Services Deleted
         foreach ($svc in $telemetryServices) {
             $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
             Assert-Check -Name "Telemetry Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
         }
 
-        # 29-31. Telemetry DLLs Deleted
+        # 33-35. Telemetry DLLs Deleted
         Assert-Check -Name "Telemetry diagtrack.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\diagtrack.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry moshost.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\moshost.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry PhoneService.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\PhoneService.dll")) -Detail "Deleted"
 
-        # 32. PlugPlay Service Disabled
+        # 36. PlugPlay Service Disabled
         $ppVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\PlugPlay`" /v Start 2>nul"
         Assert-Check -Name "PlugPlay Start=4" -Pass ($ppVal -match '0x4') -Detail "Disabled"
 
-        # 33. Spooler Service Manual
+        # 37. Spooler Service Manual
         $spVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\Spooler`" /v Start 2>nul"
         Assert-Check -Name "Spooler Start=3" -Pass ($spVal -match '0x3') -Detail "Manual"
 
-        # 34. lfsvc Disabled
+        # 38. lfsvc Disabled
         $lfVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\lfsvc`" /v Start 2>nul"
         Assert-Check -Name "lfsvc Start=4" -Pass ($lfVal -match '0x4') -Detail "Disabled"
 
-        # 35. RemoteRegistry Disabled
+        # 39. RemoteRegistry Disabled
         $rrVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\RemoteRegistry`" /v Start 2>nul"
         Assert-Check -Name "RemoteRegistry Start=4" -Pass ($rrVal -match '0x4') -Detail "Disabled"
 
-        # 36. DPS Disabled
+        # 40. DPS Disabled
         $dpsVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\DPS`" /v Start 2>nul"
         Assert-Check -Name "DPS Start=4" -Pass ($dpsVal -match '0x4') -Detail "Disabled"
 
-        # 37. ConfigureChatAutoInstall
+        # 41. ConfigureChatAutoInstall
         $chatVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Communications`" /v ConfigureChatAutoInstall 2>nul"
         Assert-Check -Name "ConfigureChatAutoInstall=0" -Pass ($chatVal -match '0x0') -Detail "Applied"
 
-        # 38. SmartScreenEnabled=off in Explorer
+        # 42. SmartScreenEnabled=off in Explorer
         $ssVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer`" /v SmartScreenEnabled 2>nul"
         Assert-Check -Name "SmartScreenEnabled=off" -Pass ($ssVal -match 'off') -Detail "Disabled in Explorer"
 
-        # 39. EnableSmartScreen=0 in System Policies
+        # 43. EnableSmartScreen=0 in System Policies
         $essVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v EnableSmartScreen 2>nul"
         Assert-Check -Name "EnableSmartScreen=0" -Pass ($essVal -match '0x0') -Detail "Disabled in System Policies"
 
-        # 40. ShellSmartScreenLevel=Off in System Policies
+        # 44. ShellSmartScreenLevel=Off in System Policies
         $ssLevel = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v ShellSmartScreenLevel 2>nul"
         Assert-Check -Name "ShellSmartScreenLevel=Off" -Pass ($ssLevel -match 'Off') -Detail "Disabled Shell Interception in System Policies"
 
-        # 41. Smart App Control State=0 (VerifiedAndReputablePolicyState)
+        # 45. Smart App Control State=0 (VerifiedAndReputablePolicyState)
         $sacVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\CI\Policy`" /v VerifiedAndReputablePolicyState 2>nul"
         Assert-Check -Name "Smart App Control State=0" -Pass ($sacVal -match '0x0') -Detail "Permanently Disabled in CI Policy"
 
-        # 42. AppHost EnableWebContentEvaluation=0
+        # 46. AppHost EnableWebContentEvaluation=0
         $appHostVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\AppHost`" /v EnableWebContentEvaluation 2>nul"
         Assert-Check -Name "AppHost EnableWebContentEvaluation=0" -Pass ($appHostVal -match '0x0') -Detail "Disabled Web Content Evaluation"
 
-        # 43. Edge SmartScreenEnabled=0
+        # 47. Edge SmartScreenEnabled=0
         $edgeSsVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Edge`" /v SmartScreenEnabled 2>nul"
         Assert-Check -Name "Edge SmartScreenEnabled=0" -Pass ($edgeSsVal -match '0x0') -Detail "Disabled in Edge Policies"
 
-        # 44. BrowserCore Chrome HKLM Host Purged
+        # 48. BrowserCore Chrome HKLM Host Purged
         $bcChrome = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore`" 2>nul"
         Assert-Check -Name "BrowserCore Chrome HKLM Host" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from HKLM NativeMessagingHosts"
 
-        # 45. BrowserCore Chrome Default Profile Host Purged
+        # 49. BrowserCore Chrome Default Profile Host Purged
         $bcChromeDef = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Software\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore`" 2>nul"
         Assert-Check -Name "BrowserCore Chrome Default Profile Host" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Default NTUSER.DAT"
 
-        # 46. BrowserCore Edge HKLM Host Purged
+        # 50. BrowserCore Edge HKLM Host Purged
         $bcEdge = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.microsoft.browsercore`" 2>nul"
         Assert-Check -Name "BrowserCore Edge HKLM Host" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from HKLM NativeMessagingHosts"
 
-        # 47. BrowserCore Mozilla HKLM Host Purged
+        # 51. BrowserCore Mozilla HKLM Host Purged
         $bcMoz = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Mozilla\NativeMessagingHosts\com.microsoft.browsercore`" 2>nul"
         Assert-Check -Name "BrowserCore Mozilla HKLM Host" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from HKLM NativeMessagingHosts"
 
-        # 48. Preserved HttpAcceptLanguageOptOut
+        # 52. Preserved HttpAcceptLanguageOptOut
         $langVal1 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Control Panel\International\User Profile`" /v HttpAcceptLanguageOptOut 2>nul"
         $langVal2 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Software\Microsoft\Windows\CurrentVersion\RunOnce`" /v `"Telemetry Language Disable`" 2>nul"
         $langVal3 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut 2>nul"
         $langPass = ($langVal1 -match '0x1') -or ($langVal2 -match 'HttpAcceptLanguageOptOut') -or ($langVal3 -match '0x1')
         Assert-Check -Name "UserHttpAcceptLanguageOptOut=1" -Pass $langPass -Detail "Preserved"
 
-        # 49. SecurityHealth Run Key Purged
+        # 53. SecurityHealth Run Key Purged
         $shRun = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Run`" /v SecurityHealth 2>nul"
         Assert-Check -Name "SecurityHealth Run Key Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Software Run key"
 
-        # 50. Windows Defender Firewall Service (MpsSvc) Preserved Intact
+        # 54. Windows Defender Firewall Service (MpsSvc) Preserved Intact
         $fwVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\mpssvc`" /v Start 2>nul"
         Assert-Check -Name "Windows Defender Firewall Service (MpsSvc)" -Pass ($fwVal -match '0x2') -Detail "Preserved (Start=2 Automatic)"
 
-        # 51. Base Filtering Engine Service (BFE) Preserved Intact
+        # 55. Base Filtering Engine Service (BFE) Preserved Intact
         $bfeVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\bfe`" /v Start 2>nul"
         Assert-Check -Name "Base Filtering Engine Service (BFE)" -Pass ($bfeVal -match '0x2') -Detail "Preserved (Start=2 Automatic)"
 
-        # 52. .NET NGEN TaskCache Tree Purged
+        # 56. .NET NGEN TaskCache Tree Purged
         $ngenTree = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\.NET Framework`" 2>nul"
         Assert-Check -Name ".NET NGEN TaskCache Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from TaskCache\Tree"
 
-        # 53. WinSAT TaskCache Tree Purged
+        # 57. WinSAT TaskCache Tree Purged
         $wsTree = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\Maintenance\WinSAT`" 2>nul"
         Assert-Check -Name "WinSAT TaskCache Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from TaskCache\Tree"
 
-        # 54. PLA TaskCache Tree Purged
+        # 58. PLA TaskCache Tree Purged
         $plaTree = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\PLA`" 2>nul"
         Assert-Check -Name "PLA TaskCache Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from TaskCache\Tree"
 
-        # 55. Telemetry AutoLogger Diagtrack-Listener Start=0
+        # 59. Telemetry AutoLogger Diagtrack-Listener Start=0
         $diagVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\WMI\Autologger\Diagtrack-Listener`" /v Start 2>nul"
         Assert-Check -Name "AutoLogger Diagtrack-Listener Start=0" -Pass ($diagVal -match '0x0') -Detail "Disabled"
 
-        # 56. CoreAI InboxApplications Purged
+        # 60. CoreAI InboxApplications Purged
         $coreAiReg = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"MicrosoftWindows.Client.CoreAI`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "CoreAI InboxApplications Purged" -Pass ($coreAiReg.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
-        # 57. WindowsAI Policy DisableAIDataAnalysis=1
+        # 61. WindowsAI Policy DisableAIDataAnalysis=1
         $aiVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsAI`" /v DisableAIDataAnalysis 2>nul"
         Assert-Check -Name "WindowsAI DisableAIDataAnalysis=1" -Pass ($aiVal -match '0x1') -Detail "Applied"
 
-        # 58. WindowsCopilot Policy TurnOffWindowsCopilot=1
+        # 62. WindowsCopilot Policy TurnOffWindowsCopilot=1
         $copilotVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot 2>nul"
         Assert-Check -Name "WindowsCopilot TurnOffWindowsCopilot=1" -Pass ($copilotVal -match '0x1') -Detail "Applied"
 
-        # 59. Narrator AT Registration Purged
+        # 63. Narrator AT Registration Purged
         $narratorAt = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Accessibility\ATs\Narrator`" 2>nul"
         Assert-Check -Name "Narrator AT Registration Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Accessibility\ATs"
 
-        # 60. NarratorQuickStart InboxApplications Purged
+        # 64. NarratorQuickStart InboxApplications Purged
         $narratorAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"NarratorQuickStart`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "NarratorQuickStart InboxApplications Purged" -Pass ($narratorAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
-        # 61. Add Folder Suggestions InboxApp Purged
+        # 65. Add Folder Suggestions InboxApp Purged
         $fsAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"F46D4000-FD22-4DB4-AC8E-4E1DDDE828FE`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "Add Folder Suggestions InboxApp Purged" -Pass ($fsAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
-        # 62. PinningConfirmationDialog InboxApp Purged
+        # 66. PinningConfirmationDialog InboxApp Purged
         $pinningAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"PinningConfirmationDialog`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "PinningConfirmationDialog InboxApp Purged" -Pass ($pinningAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
-        # 63. File Explorer (Legacy) InboxApp Purged
+        # 67. File Explorer (Legacy) InboxApp Purged
         $feAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"c5e2524a-ea46-4f67-841f-6a9465d9d515`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "File Explorer (Legacy) InboxApp Purged" -Pass ($feAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
-        # 64. AppResolverUX InboxApp Purged
+        # 68. AppResolverUX InboxApp Purged
         $arAppx = @(cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"E2A4F912-2574-4A75-9BB0-0D023378592B`" 2>nul" | Select-String "HKEY_")
         Assert-Check -Name "AppResolverUX InboxApp Purged" -Pass ($arAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
-        # 65. Explorer NoUseStoreOpenWith=1 Policy
+        # 69. Explorer NoUseStoreOpenWith=1 Policy
         $openWithVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\Explorer`" /v NoUseStoreOpenWith 2>nul"
         Assert-Check -Name "Explorer NoUseStoreOpenWith=1" -Pass ($openWithVal -match '0x1') -Detail "Enforced in Explorer Policies"
 
-        # 66. OneDrive Default Profile Run Key Purged
+        # 70. OneDrive Default Profile Run Key Purged
         $odRun = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Software\Microsoft\Windows\CurrentVersion\Run`" /v OneDriveSetup 2>nul"
         Assert-Check -Name "OneDrive Default Profile Run Key Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Default NTUSER.DAT"
 
-        # 67. OneDrive Policy DisableFileSyncNGSC=1
+        # 71. OneDrive Policy DisableFileSyncNGSC=1
         $odPol = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\OneDrive`" /v DisableFileSyncNGSC 2>nul"
         Assert-Check -Name "OneDrive DisableFileSyncNGSC=1" -Pass ($odPol -match '0x1') -Detail "Enforced in Policies"
 
-        # 68. OneDrive Namespace Unpinned
+        # 72. OneDrive Namespace Unpinned
         $odPin = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}`" /v System.IsPinnedToNameSpaceTree 2>nul"
         Assert-Check -Name "OneDrive Namespace Pinned=0" -Pass ($odPin -match '0x0') -Detail "Unpinned from Explorer Sidebar"
+
+        # 73. RetailDemo Registry Tree Purged
+        $rdxVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\RetailDemo`" 2>nul"
+        Assert-Check -Name "RetailDemo Registry Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from CurrentVersion\RetailDemo"
+
+        # 74. RetailDemo AllowRetailDemo=0 Policy
+        $rdxPol = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\RetailDemo`" /v AllowRetailDemo 2>nul"
+        Assert-Check -Name "RetailDemo AllowRetailDemo=0" -Pass ($rdxPol -match '0x0') -Detail "Enforced in Policies"
     }
     finally {
         # Unload validation hives
@@ -1342,110 +1423,113 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 69. Defender Driver WdFilter.sys
+    # 75. Defender Driver WdFilter.sys
     Assert-Check -Name "Defender Driver WdFilter.sys" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\WdFilter.sys")) -Detail "Deleted"
 
-    # 70. Defender SecurityHealthSystray
+    # 76. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 71. Firewall Binary mpssvc.dll Intact
+    # 77. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 72. Firewall MMC wf.msc Intact
+    # 78. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 73. .NET NativeImages 64 Cache
+    # 79. .NET NativeImages 64 Cache
     Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
 
-    # 74. .NET NativeImages 32 Cache
+    # 80. .NET NativeImages 32 Cache
     Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
 
-    # 75. .NET GAC_MSIL Preserved
+    # 81. .NET GAC_MSIL Preserved
     Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
 
-    # 76. WinSAT Binary System32 Deleted
+    # 82. WinSAT Binary System32 Deleted
     Assert-Check -Name "WinSAT Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\WinSAT.exe")) -Detail "Deleted"
 
-    # 77. WinSAT Performance Directory Purged
+    # 83. WinSAT Performance Directory Purged
     Assert-Check -Name "WinSAT Performance Directory" -Pass (-not (Test-Path "$MountDir\Windows\Performance\WinSAT")) -Detail "Purged"
 
-    # 78. System Monitor sysmon.ocx Deleted
+    # 84. System Monitor sysmon.ocx Deleted
     Assert-Check -Name "System Monitor sysmon.ocx" -Pass (-not (Test-Path "$MountDir\Windows\System32\sysmon.ocx")) -Detail "Deleted"
 
-    # 79. Performance Monitor perfmon.exe Deleted
+    # 85. Performance Monitor perfmon.exe Deleted
     Assert-Check -Name "Performance Monitor perfmon.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\perfmon.exe")) -Detail "Deleted"
 
-    # 80. Resource Monitor resmon.exe Preserved
+    # 86. Resource Monitor resmon.exe Preserved
     Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
 
-    # 81. Kernel Debug Transport kdnet.dll Deleted
+    # 87. Kernel Debug Transport kdnet.dll Deleted
     Assert-Check -Name "Kernel Debug Transport kdnet.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\kdnet.dll")) -Detail "Deleted"
 
-    # 82. Kernel Debug DriverStore kdnic Purged
+    # 88. Kernel Debug DriverStore kdnic Purged
     $kdnicCount = (Get-ChildItem -Path "$MountDir\Windows\System32\DriverStore\FileRepository" -Filter "kdnic*.inf_*" -Directory -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "Kernel Debug DriverStore kdnic" -Pass ($kdnicCount -eq 0) -Detail "Purged"
 
-    # 83. Kernel Debug Stub kdcom.dll Preserved
+    # 89. Kernel Debug Stub kdcom.dll Preserved
     Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
 
-    # 84. CoreAI SystemApp Purged
+    # 90. CoreAI SystemApp Purged
     $coreAiRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CoreAI_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "CoreAI SystemApp Purged" -Pass ($coreAiRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 85. CoreAI onnxruntime.dll Deleted
+    # 91. CoreAI onnxruntime.dll Deleted
     Assert-Check -Name "CoreAI onnxruntime.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\onnxruntime.dll")) -Detail "Deleted"
 
-    # 86. Base Client.CBS Preserved
+    # 92. Base Client.CBS Preserved
     $cbsRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CBS_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Base Client.CBS Preserved" -Pass ($cbsRem.Count -gt 0) -Detail "Intact (Taskbar/Explorer preserved)"
 
-    # 87. Narrator Binary System32 Deleted
+    # 93. Narrator Binary System32 Deleted
     Assert-Check -Name "Narrator Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\Narrator.exe")) -Detail "Deleted"
 
-    # 88. NarratorMCAT Directory Purged
+    # 94. NarratorMCAT Directory Purged
     Assert-Check -Name "NarratorMCAT Directory" -Pass (-not (Test-Path "$MountDir\Windows\System32\NarratorMCAT")) -Detail "Purged"
 
-    # 89. NarratorQuickStart SystemApp Purged
+    # 95. NarratorQuickStart SystemApp Purged
     $narratorAppCount = (Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*microsoft.windows.narratorquickstart*" -Directory -ErrorAction SilentlyContinue).Count
     Assert-Check -Name "NarratorQuickStart SystemApp Purged" -Pass ($narratorAppCount -eq 0) -Detail "Purged from SystemApps"
 
-    # 90. Add Folder Suggestions SystemApp Purged
+    # 96. Add Folder Suggestions SystemApp Purged
     $fsAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*AddSuggestedFoldersToLibraryDialog*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "Add Folder Suggestions SystemApp Purged" -Pass ($fsAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 91. PinningConfirmationDialog SystemApp Purged
+    # 97. PinningConfirmationDialog SystemApp Purged
     $pinningAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*Microsoft.Windows.PinningConfirmationDialog*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "PinningConfirmationDialog SystemApp Purged" -Pass ($pinningAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 92. File Explorer (Legacy) SystemApp Purged
+    # 98. File Explorer (Legacy) SystemApp Purged
     $feAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "Microsoft.Windows.FileExplorer_*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "File Explorer (Legacy) SystemApp Purged" -Pass ($feAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 93. AppResolverUX SystemApp Purged
+    # 99. AppResolverUX SystemApp Purged
     $arAppRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "*Microsoft.Windows.AppResolverUX*" -Directory -ErrorAction SilentlyContinue
     Assert-Check -Name "AppResolverUX SystemApp Purged" -Pass ($arAppRem.Count -eq 0) -Detail "Purged from SystemApps"
 
-    # 94. Classic Open With Binary openwith.exe Preserved
+    # 100. Classic Open With Binary openwith.exe Preserved
     Assert-Check -Name "Classic openwith.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\openwith.exe") -Detail "Intact (Classic Win32 dialog fallback)"
 
-    # 95. OneDrive Tasks Directory Purged
+    # 101. OneDrive Tasks Directory Purged
     Assert-Check -Name "OneDrive Tasks Directory Purged" -Pass (-not (Test-Path "$MountDir\Windows\System32\Tasks\Microsoft\Windows\OneDrive")) -Detail "Purged from System32\Tasks"
 
-    # 96. Region Policy In-Place Patch
+    # 102. RetailDemo CloudExperienceHost Purged
+    Assert-Check -Name "RetailDemo CloudExperienceHost Purged" -Pass (-not (Test-Path "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy\RetailDemo")) -Detail "Purged from CloudExperienceHost"
+
+    # 103. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 97. OEMDefaultAssociations.xml
+    # 104. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 98. Notepad.lnk
+    # 105. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 99. SetupComplete.cmd Exists
+    # 106. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 100. SetupComplete.cmd Has Self-Delete
+    # 107. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
