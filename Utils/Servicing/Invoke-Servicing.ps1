@@ -461,6 +461,34 @@ function Invoke-ElevatedRegDelete([string[]]$regKeys) {
     Remove-RegKey -Key $regKeys -Elevated
 }
 
+function Remove-ForceFilesByPattern {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string[]]$Path,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string[]]$Pattern,
+
+        [switch]$Recurse
+    )
+    foreach ($p in $Path) {
+        if (-not (Test-Path $p)) { continue }
+        foreach ($pat in $Pattern) {
+            $gciParams = @{
+                Path        = $p
+                Filter      = $pat
+                File        = $true
+                ErrorAction = 'SilentlyContinue'
+            }
+            if ($Recurse) { $gciParams['Recurse'] = $true }
+            Get-ChildItem @gciParams | ForEach-Object {
+                Remove-ForceFile $_.FullName
+            }
+        }
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
