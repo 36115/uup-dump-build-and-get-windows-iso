@@ -481,6 +481,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
     $mountDir = Join-Path $env:TEMP "Mount_Debloat_$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $mountDir -Force | Out-Null
+    Add-MpPreference -ExclusionPath $mountDir -ErrorAction SilentlyContinue
     Write-CleanLine "Mounting $installWim index 1 to $mountDir..."
     & dism.exe /Mount-Wim /WimFile:$installWim /Index:1 /MountDir:$mountDir
     if ($LASTEXITCODE -ne 0) { throw "dism /Mount-Wim failed with exit code $LASTEXITCODE" }
@@ -501,15 +502,39 @@ function Get-WindowsIso($name, $destinationDirectory) {
           -NSudoPath $nsudo
       if ($LASTEXITCODE -ne 0) { throw "Invoke-Debloat.ps1 failed with exit code $LASTEXITCODE" }
 
+      # Ensure location is not holding the mount directory and release handles
+      Set-Location $PSScriptRoot
+      [System.GC]::Collect()
+      [System.GC]::WaitForPendingFinalizers()
+      Start-Sleep -Seconds 2
+
       Write-CleanLine "Unmounting and committing image at $mountDir..."
-      & dism.exe /Unmount-Wim /MountDir:$mountDir /Commit
-      if ($LASTEXITCODE -ne 0) { throw "dism /Unmount-Wim /Commit failed with exit code $LASTEXITCODE" }
-      $isMounted = $false
+      $unmountSuccess = $false
+      for ($attempt = 1; $attempt -le 5; $attempt++) {
+          [System.GC]::Collect()
+          [System.GC]::WaitForPendingFinalizers()
+          & dism.exe /Unmount-Wim /MountDir:$mountDir /Commit
+          if ($LASTEXITCODE -eq 0) {
+              $unmountSuccess = $true
+              $isMounted = $false
+              break
+          }
+          Write-Warning "dism /Unmount-Wim /Commit attempt $attempt failed with exit code $LASTEXITCODE. Retrying in $($attempt * 3) seconds..."
+          Start-Sleep -Seconds ($attempt * 3)
+      }
+      if (-not $unmountSuccess) {
+          throw "dism /Unmount-Wim /Commit failed after 5 attempts with exit code $LASTEXITCODE"
+      }
     }
     finally {
       if ($isMounted) {
-        & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard *> $null
+        for ($discardAttempt = 1; $discardAttempt -le 3; $discardAttempt++) {
+          & dism.exe /Unmount-Wim /MountDir:$mountDir /Discard *> $null
+          if ($LASTEXITCODE -eq 0) { break }
+          Start-Sleep -Seconds 2
+        }
       }
+      Remove-MpPreference -ExclusionPath $mountDir -ErrorAction SilentlyContinue
       if (Test-Path $mountDir) {
         Remove-Item $mountDir -Force -Recurse -ErrorAction SilentlyContinue
       }

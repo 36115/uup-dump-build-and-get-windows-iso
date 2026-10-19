@@ -932,11 +932,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to load offline SOFTWARE hive: $loadSof"
 }
 
+New-PSDrive -Name "OffSoftware" -PSProvider Registry -Root "HKEY_LOCAL_MACHINE\OFFLINE_SOFTWARE" -ErrorAction SilentlyContinue | Out-Null
 if (Test-Path $defHive) {
     cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
-    if (-not (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue)) {
-        New-PSDrive -Name HKU -PSProvider Registry -Root HKEY_USERS -ErrorAction SilentlyContinue | Out-Null
-    }
+    New-PSDrive -Name "OffDefault" -PSProvider Registry -Root "HKEY_USERS\OFFLINE_DEFAULT" -ErrorAction SilentlyContinue | Out-Null
 }
 Write-Success "Loaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
 
@@ -1437,7 +1436,7 @@ try {
         Invoke-ElevatedRegDelete ($familyDelKeys | Select-Object -Unique)
 
         # Unbind deleted services from Svchost groups (NTLite LocalService unbinding)
-        $svchostPath = "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost"
+        $svchostPath = "OffSoftware:\Microsoft\Windows NT\CurrentVersion\Svchost"
         if (Test-Path $svchostPath) {
             $svchostKey = Get-Item $svchostPath
             foreach ($valName in $svchostKey.GetValueNames()) {
@@ -1450,6 +1449,7 @@ try {
                     }
                 }
             }
+            $svchostKey.Close()
         }
         Write-Success "Purged Microsoft Family and ParentalControls AppxAllUserStore registrations, TaskCache, and unbound from Svchost."
 
@@ -1498,7 +1498,7 @@ try {
             "HKLM\OFFLINE_SOFTWARE\WOW6432Node\Classes\CLSID\{8B918C82-2254-462E-AB35-6EAEC438D4B5}"
         )
         # Purge all 32-bit CLSIDs referencing SysWOW64\mstscax.dll
-        Get-ChildItem "HKLM:\OFFLINE_SOFTWARE\Classes\WOW6432Node\CLSID" -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem "OffSoftware:\Classes\WOW6432Node\CLSID" -ErrorAction SilentlyContinue | ForEach-Object {
             $inproc = Get-ItemProperty "$($_.PSPath)\InprocServer32" -ErrorAction SilentlyContinue
             if ($inproc -and ($inproc.'(default)' -like "*mstscax*")) {
                 $rdp32DelKeys += "HKLM\OFFLINE_SOFTWARE\Classes\WOW6432Node\CLSID\$($_.PSChildName)"
@@ -1538,33 +1538,32 @@ try {
         # 5x. DISABLE CROSS-DEVICE RESUME & CONNECTED DEVICES PLATFORM (CrossDeviceResume)
         Write-Info "Hard-blocking CrossDeviceResume.exe via IFEO and enforcing Cross-Device / CDP disable policies..."
         # 1. Hard-block process execution via IFEO
-        $ifeoPath = "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\CrossDeviceResume.exe"
+        $ifeoPath = "OffSoftware:\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\CrossDeviceResume.exe"
         if (-not (Test-Path $ifeoPath)) { New-Item -Path $ifeoPath -Force | Out-Null }
         Set-ItemProperty -Path $ifeoPath -Name "Debugger" -Value "systray.exe" -Type String -Force
 
         # 2. Disable Cross-Device Resume & Connected Devices Platform policies (Machine & Default User)
-        $machSysPol = "HKLM:\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System"
+        $machSysPol = "OffSoftware:\Policies\Microsoft\Windows\System"
         if (-not (Test-Path $machSysPol)) { New-Item -Path $machSysPol -Force | Out-Null }
         Set-ItemProperty -Path $machSysPol -Name "EnableCrossDeviceResume" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $machSysPol -Name "EnableCdp" -Value 0 -Type DWord -Force
 
-        if (-not (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue)) {
-            New-PSDrive -Name HKU -PSProvider Registry -Root HKEY_USERS -ErrorAction SilentlyContinue | Out-Null
-        }
-        if (Test-Path "HKU:\OFFLINE_DEFAULT") {
-            $defSysPol = "HKU:\OFFLINE_DEFAULT\Software\Policies\Microsoft\Windows\System"
-            if (-not (Test-Path $defSysPol)) { New-Item -Path $defSysPol -Force | Out-Null }
-            Set-ItemProperty -Path $defSysPol -Name "EnableCrossDeviceResume" -Value 0 -Type DWord -Force
-            Set-ItemProperty -Path $defSysPol -Name "EnableCdp" -Value 0 -Type DWord -Force
+        if (Test-Path "OffDefault:\Software\Policies\Microsoft\Windows\System") {
+            Set-ItemProperty -Path "OffDefault:\Software\Policies\Microsoft\Windows\System" -Name "EnableCrossDeviceResume" -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path "OffDefault:\Software\Policies\Microsoft\Windows\System" -Name "EnableCdp" -Value 0 -Type DWord -Force
+        } elseif (Test-Path "OffDefault:\") {
+            New-Item -Path "OffDefault:\Software\Policies\Microsoft\Windows\System" -Force | Out-Null
+            Set-ItemProperty -Path "OffDefault:\Software\Policies\Microsoft\Windows\System" -Name "EnableCrossDeviceResume" -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path "OffDefault:\Software\Policies\Microsoft\Windows\System" -Name "EnableCdp" -Value 0 -Type DWord -Force
         }
 
         # 3. Disable MDM Connectivity policy
-        $pmDefConn = "HKLM:\OFFLINE_SOFTWARE\Microsoft\PolicyManager\default\Connectivity\DisableCrossDeviceResume"
+        $pmDefConn = "OffSoftware:\Microsoft\PolicyManager\default\Connectivity\DisableCrossDeviceResume"
         if (-not (Test-Path $pmDefConn)) { New-Item -Path $pmDefConn -Force | Out-Null }
         Set-ItemProperty -Path $pmDefConn -Name "value" -Value 1 -Type DWord -Force
 
-        $pmCurConn = "HKLM:\OFFLINE_SOFTWARE\Microsoft\PolicyManager\current\device\Connectivity\DisableCrossDeviceResume"
-        if (Test-Path "HKLM:\OFFLINE_SOFTWARE\Microsoft\PolicyManager\current\device\Connectivity") {
+        $pmCurConn = "OffSoftware:\Microsoft\PolicyManager\current\device\Connectivity\DisableCrossDeviceResume"
+        if (Test-Path "OffSoftware:\Microsoft\PolicyManager\current\device\Connectivity") {
             if (-not (Test-Path $pmCurConn)) { New-Item -Path $pmCurConn -Force | Out-Null }
             Set-ItemProperty -Path $pmCurConn -Name "value" -Value 1 -Type DWord -Force
         }
@@ -1574,15 +1573,28 @@ try {
     }
 finally {
     # Unload hives safely
+    Remove-PSDrive -Name "OffSoftware" -Force -ErrorAction SilentlyContinue | Out-Null
+    Remove-PSDrive -Name "OffDefault" -Force -ErrorAction SilentlyContinue | Out-Null
+    Remove-PSDrive -Name HKU -Force -ErrorAction SilentlyContinue | Out-Null
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
     Start-Sleep -Milliseconds 500
-    if (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue) {
-        Remove-PSDrive -Name HKU -ErrorAction SilentlyContinue | Out-Null
+
+    $hivesToUnload = @("HKLM\OFFLINE_SYSTEM", "HKLM\OFFLINE_SOFTWARE", "HKU\OFFLINE_DEFAULT")
+    foreach ($h in $hivesToUnload) {
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+            $unl = cmd /c "reg unload `"$h`" 2>&1"
+            $check = cmd /c "reg query `"$h`" 2>&1"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Success "Unloaded $h (attempt $attempt)"
+                break
+            }
+            Write-Warning "Failed to unload $h (attempt $attempt): $unl"
+            Start-Sleep -Milliseconds 500
+        }
     }
-    cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
-    cmd /c "reg unload HKLM\OFFLINE_SOFTWARE >nul 2>&1"
-    cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     Write-Success "Unloaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
 }
 
@@ -1974,9 +1986,6 @@ if (-not $SkipValidation) {
     cmd /c "reg load HKLM\OFFLINE_SOFTWARE `"$sofHive`" >nul 2>&1"
     if (Test-Path $defHive) {
         cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
-        if (-not (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue)) {
-            New-PSDrive -Name HKU -PSProvider Registry -Root HKEY_USERS -ErrorAction SilentlyContinue | Out-Null
-        }
     }
 
     try {
@@ -2221,8 +2230,8 @@ if (-not $SkipValidation) {
         Assert-Check -Name "MicrosoftFamily App Purged" -Pass ($famAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
         # 91. Svchost LocalService WpcMonSvc Unbound
-        $svchostLS = (Get-Item "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost").GetValue("LocalService")
-        Assert-Check -Name "Svchost LocalService WpcMonSvc Unbound" -Pass ($svchostLS -notcontains "WpcMonSvc") -Detail "Unbound from svchost group"
+        $svLS = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost`" /v LocalService 2>nul"
+        Assert-Check -Name "Svchost LocalService WpcMonSvc Unbound" -Pass ($svLS -notmatch "WpcMonSvc") -Detail "Unbound from svchost group"
 
         # 92. IE StartMenuInternet Purged
         $ieSmi = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE`" 2>nul"
@@ -2249,8 +2258,8 @@ if (-not $SkipValidation) {
         Assert-Check -Name "RemoteRegistry Software Key Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Windows NT\CurrentVersion"
 
         # 98. Svchost RemoteRegistry Unbound
-        $svchostLSI = (Get-Item "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost").GetValue("LocalServiceAndNoImpersonation")
-        Assert-Check -Name "Svchost RemoteRegistry Unbound" -Pass ($svchostLSI -notcontains "RemoteRegistry") -Detail "Unbound from svchost group"
+        $svLSI = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost`" /v LocalServiceAndNoImpersonation 2>nul"
+        Assert-Check -Name "Svchost RemoteRegistry Unbound" -Pass ($svLSI -notmatch "RemoteRegistry") -Detail "Unbound from svchost group"
 
         # 99. RDP 32-bit App Paths Purged
         $rdpAp = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\mstsc.exe`" 2>nul"
@@ -2269,32 +2278,49 @@ if (-not $SkipValidation) {
         Assert-Check -Name "EdgeDevTools InboxApplications Purged" -Pass ($dtAppx.Count -eq 0) -Detail "Purged from AppxAllUserStore"
 
         # 103. EdgeDevTools Protocol Scheme Purged
-        Assert-Check -Name "EdgeDevTools Protocol Scheme Purged" -Pass (-not (Test-Path "HKLM:\OFFLINE_SOFTWARE\Classes\microsoft-edge-devtools")) -Detail "Purged from Classes"
+        $dtProto = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Classes\microsoft-edge-devtools`" 2>nul"
+        Assert-Check -Name "EdgeDevTools Protocol Scheme Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Classes"
 
         # 104. CrossDeviceResume IFEO Hard-Blocked
-        $ifeoVal = (Get-ItemProperty "HKLM:\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\CrossDeviceResume.exe" -ErrorAction SilentlyContinue).Debugger
-        Assert-Check -Name "CrossDeviceResume IFEO Hard-Blocked" -Pass ($ifeoVal -eq "systray.exe") -Detail "Debugger=systray.exe"
+        $ifeoVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\CrossDeviceResume.exe`" /v Debugger 2>nul"
+        Assert-Check -Name "CrossDeviceResume IFEO Hard-Blocked" -Pass ($ifeoVal -match "systray\.exe") -Detail "Debugger=systray.exe"
 
         # 105. CrossDeviceResume Policy Disabled
-        $cdrVal = (Get-ItemProperty "HKLM:\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System" -ErrorAction SilentlyContinue).EnableCrossDeviceResume
-        Assert-Check -Name "CrossDeviceResume Policy Disabled" -Pass ($cdrVal -eq 0) -Detail "EnableCrossDeviceResume=0"
+        $cdrVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v EnableCrossDeviceResume 2>nul"
+        Assert-Check -Name "CrossDeviceResume Policy Disabled" -Pass ($cdrVal -match "0x0") -Detail "EnableCrossDeviceResume=0"
 
         # 106. Connected Devices Platform EnableCdp=0
-        $cdpVal = (Get-ItemProperty "HKLM:\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System" -ErrorAction SilentlyContinue).EnableCdp
-        Assert-Check -Name "Connected Devices Platform EnableCdp=0" -Pass ($cdpVal -eq 0) -Detail "EnableCdp=0"
+        $cdpVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v EnableCdp 2>nul"
+        Assert-Check -Name "Connected Devices Platform EnableCdp=0" -Pass ($cdpVal -match "0x0") -Detail "EnableCdp=0"
 
         # 107. CrossDeviceResume PolicyManager Value=1
-        $pmVal = (Get-ItemProperty "HKLM:\OFFLINE_SOFTWARE\Microsoft\PolicyManager\default\Connectivity\DisableCrossDeviceResume" -ErrorAction SilentlyContinue).value
-        Assert-Check -Name "CrossDeviceResume PolicyManager Value=1" -Pass ($pmVal -eq 1) -Detail "DisableCrossDeviceResume=1"
+        $pmVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\PolicyManager\default\Connectivity\DisableCrossDeviceResume`" /v value 2>nul"
+        Assert-Check -Name "CrossDeviceResume PolicyManager Value=1" -Pass ($pmVal -match "0x1") -Detail "DisableCrossDeviceResume=1"
     }
     finally {
         # Unload validation hives
         if (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue) {
             Remove-PSDrive -Name HKU -ErrorAction SilentlyContinue | Out-Null
         }
-        cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
-        cmd /c "reg unload HKLM\OFFLINE_SOFTWARE >nul 2>&1"
-        cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+        Start-Sleep -Milliseconds 500
+
+        $hivesToUnload = @("HKLM\OFFLINE_SYSTEM", "HKLM\OFFLINE_SOFTWARE", "HKU\OFFLINE_DEFAULT")
+        foreach ($h in $hivesToUnload) {
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+                [System.GC]::Collect()
+                [System.GC]::WaitForPendingFinalizers()
+                $unl = cmd /c "reg unload `"$h`" 2>&1"
+                $check = cmd /c "reg query `"$h`" 2>&1"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Success "Validation hive unloaded: $h (attempt $attempt)"
+                    break
+                }
+                Write-Warning "Failed to unload validation hive $h (attempt $attempt): $unl"
+                Start-Sleep -Milliseconds 500
+            }
+        }
     }
 
     # 108. Defender Driver WdFilter.sys
@@ -2536,4 +2562,10 @@ if (-not $SkipValidation) {
     Write-Host "`n============================================================" -ForegroundColor Green
     Write-Host " QUALITY GATE RESULT: $($script:results.Count)/$($script:results.Count) CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
+
+    # Release any lingering file handles and restore working directory away from MountDir
+    Set-Location $env:TEMP
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
+    Start-Sleep -Milliseconds 500
 }
