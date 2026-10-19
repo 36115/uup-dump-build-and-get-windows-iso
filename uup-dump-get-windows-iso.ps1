@@ -81,7 +81,13 @@ function Get-WindowsIso($name, $destinationDirectory) {
         $virtualEd = if ($hasVirtualMember) { $virtualEdn } else { "" }
         Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
 
-        $targetOS = if ($name -match '(?i)win(dows)?[-_\s]?10') { '10' } else { '11' }
+        $targetOS = if (Test-Path variable:global:targetOS) {
+            "$global:targetOS"
+        } elseif ($name -match '(?i)win(dows)?[-_\s]?10' -or ($iso -and $iso.build -and [int]($iso.build -split '\.')[0] -lt 22000)) {
+            '10'
+        } else {
+            '11'
+        }
         $global:targetOS = $targetOS
         $resolvedProfile = if ($profileName) { $profileName } else { "Default" }
         $resolvedProfileDir = if (Get-Command Resolve-ProfileDir -ErrorAction SilentlyContinue) {
@@ -171,14 +177,11 @@ function Get-WindowsIso($name, $destinationDirectory) {
                         Remove-Item $installWim -Force
     }
 
-    # Clean SourceIso media and service boot.wim using Build-BaseISO.ps1 on uupdump's distribution folder
+    # Clean SourceIso media and service boot.wim using New-BaseIsoMedia on uupdump's distribution folder
     $baseInput = if ($sourceIso -and (Test-Path $sourceIso)) { $sourceIso } else { $distDir }
-    Write-CleanLine "Running Build-BaseISO.ps1 on $baseInput..."
-    $baseScript = Join-Path $PSScriptRoot "Config\All\Debloat\OS\Scripts\ISO\Build-BaseISO.ps1"
-    if (-not (Test-Path $baseScript)) { $baseScript = Join-Path $PSScriptRoot "Config\ISO\Build-BaseISO.ps1" }
+    Write-CleanLine "Extracting and servicing clean base media from $baseInput..."
     $cleanSourceIsoDir = Join-Path $buildDirectory "CleanSourceIso"
-    & powershell -ExecutionPolicy Bypass -File $baseScript -SourceIsoPath $baseInput -OutputDirectory $cleanSourceIsoDir
-    if ($LASTEXITCODE -ne 0) { throw "Build-BaseISO.ps1 failed with exit code $LASTEXITCODE" }
+    New-BaseIsoMedia -SourceIsoPath $baseInput -OutputDirectory $cleanSourceIsoDir -TargetOS $targetOS -ProfileName $resolvedProfile
 
     # Copy serviced install image into the clean SourceIso media
     $servicedInstallWim = Join-Path $distDir "sources\install.wim"
@@ -201,7 +204,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
         $isoFormat = if ($profileChain -and (Get-Command Get-ProfileIsoNameFormat -ErrorAction SilentlyContinue)) {
             Get-ProfileIsoNameFormat -ProfileChain $profileChain
         } else { "" }
-        Get-IsoName -TargetName $name -EditionShort $edInfo.Short -VersionBuild $verbuild -BuildNumber $iso.build -Format $isoFormat
+        Get-IsoName -TargetName $name -EditionShort $edInfo.Short -VersionBuild $verbuild -BuildNumber $iso.build -TargetOS $targetOS -Format $isoFormat
     } else {
         $title
     }
