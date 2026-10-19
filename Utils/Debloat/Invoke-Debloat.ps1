@@ -105,6 +105,19 @@ foreach ($feat in $featuresToRemove) {
 }
 
 # -------------------------------------------------------------
+# STEP 2: Purge Windows\InboxApps
+# -------------------------------------------------------------
+Write-Step "[2/11] Purging Pre-staged Apps (Windows\InboxApps)..."
+$inboxApps = "$MountDir\Windows\InboxApps"
+if (Test-Path $inboxApps) {
+    Remove-ForceDirectory $inboxApps
+    Write-Success "Windows\InboxApps purged."
+} else {
+    Write-Info "Windows\InboxApps already absent."
+}
+
+
+# -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
 Write-Step "[5/11] Servicing Offline Registry Hives..."
@@ -234,6 +247,10 @@ if (-not $SkipValidation) {
     Assert-Check -Name "Recall Feature Removed" -Pass ($recallOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
 
 
+    # 3. InboxApps
+    Assert-Check -Name "InboxApps Purged" -Pass (-not (Test-Path "$MountDir\Windows\InboxApps")) -Detail "Directory does not exist"
+
+
     # Re-load hives for registry assertions
     cmd /c "reg load HKLM\OFFLINE_SYSTEM `"$sysHive`" >nul 2>&1"
     cmd /c "reg load HKLM\OFFLINE_SOFTWARE `"$sofHive`" >nul 2>&1"
@@ -253,6 +270,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 1/1 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 2/2 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
