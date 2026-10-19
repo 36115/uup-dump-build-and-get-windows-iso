@@ -229,6 +229,23 @@ foreach ($bin in $oneDriveBinaries) {
     }
 }
 
+# .NET Framework Native Image Cache (NGEN) Folders (NTLite assembly.net)
+# Strips pre-JIT-compiled native image blobs (~360+ MB) while strictly preserving GAC_MSIL
+$ngenFolders = @(
+    "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64",
+    "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32",
+    "$MountDir\Windows\assembly\NativeImages_v2.0.50727_64",
+    "$MountDir\Windows\assembly\NativeImages_v2.0.50727_32",
+    "$MountDir\Windows\assembly\temp",
+    "$MountDir\Windows\assembly\tmp"
+)
+foreach ($dir in $ngenFolders) {
+    if (Test-Path $dir) {
+        Remove-ForceDirectory $dir
+        Write-Success "Deleted .NET Native Image Cache: $(Split-Path $dir -Leaf)"
+    }
+}
+
 # -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
@@ -396,6 +413,28 @@ try {
             }
         }
         Write-Success "SmartScreen disabled (SmartScreenEnabled=off, EnableSmartScreen=0) and BrowserCore registrations purged."
+
+        # 5g. RESET FUSION & NGEN NATIVE IMAGES REGISTRY (NTLite assembly.net)
+        Write-Info "Cleansing Fusion & NGEN registry entries..."
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Fusion\NativeImagesIndex`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\.NETFramework\v4.0.30319\NGEN`" /f >nul 2>&1"
+        Write-Success "Fusion & NGEN native image cache indexes cleansed."
+
+        # 5h. SUPPRESS BACKGROUND NGEN AUTO-REGENERATION SCHEDULED TASKS
+        Write-Info "Suppressing .NET Framework NGEN background regeneration tasks..."
+        $ngenTaskGuids = @(
+            "{09B75BFE-4FDF-47B3-A7FD-899A092F9899}",
+            "{01612C27-6C74-4BA7-A9FC-F7D32415C0D4}",
+            "{A089E292-F4B9-4EB5-A09E-0C4BF448E005}",
+            "{C4BB3D7E-BF6E-42EE-B532-1E0832DA3EA9}"
+        )
+        foreach ($tg in $ngenTaskGuids) {
+            cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\$tg`" /f >nul 2>&1"
+            cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Maintenance\$tg`" /f >nul 2>&1"
+            cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Plain\$tg`" /f >nul 2>&1"
+        }
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\.NET Framework`" /f >nul 2>&1"
+        Write-Success "Purged .NET Framework NGEN TaskCache registrations."
     }
 }
 finally {
@@ -514,6 +553,11 @@ compact /c /s /a /i /exe:lzx "C:\Program Files (x86)\*"
 compact /c /s /a /i /exe:lzx "C:\ProgramData\*"
 compact /c /s /a /i /exe:lzx "C:\Users\*"
 compact /c /s /a /i /exe:lzx "C:\Windows\*"
+
+schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319" /f >nul 2>&1
+schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 64" /f >nul 2>&1
+schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 Critical" /f >nul 2>&1
+schtasks /delete /tn "\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 64 Critical" /f >nul 2>&1
 
 cd /d %SystemDrive%\
 start /b "" cmd /c "ping 127.0.0.1 -n 2 >nul & rd /s /q "%WINDIR%\Setup\Scripts""
@@ -659,6 +703,10 @@ if (-not $SkipValidation) {
         # 41. Base Filtering Engine Service (BFE) Preserved Intact
         $bfeVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\bfe`" /v Start 2>nul"
         Assert-Check -Name "Base Filtering Engine Service (BFE)" -Pass ($bfeVal -match '0x2') -Detail "Preserved (Start=2 Automatic)"
+
+        # 42. .NET NGEN TaskCache Tree Purged
+        $ngenTree = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\.NET Framework`" 2>nul"
+        Assert-Check -Name ".NET NGEN TaskCache Tree Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from TaskCache\Tree"
     }
     finally {
         # Unload validation hives
@@ -667,33 +715,42 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 42. Defender Driver WdFilter.sys
+    # 43. Defender Driver WdFilter.sys
     Assert-Check -Name "Defender Driver WdFilter.sys" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\WdFilter.sys")) -Detail "Deleted"
 
-    # 43. Defender SecurityHealthSystray
+    # 44. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 44. Firewall Binary mpssvc.dll Intact
+    # 45. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 45. Firewall MMC wf.msc Intact
+    # 46. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 46. Region Policy In-Place Patch
+    # 47. .NET NativeImages 64 Cache
+    Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
+
+    # 48. .NET NativeImages 32 Cache
+    Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
+
+    # 49. .NET GAC_MSIL Preserved
+    Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
+
+    # 50. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 47. OEMDefaultAssociations.xml
+    # 51. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 48. Notepad.lnk
+    # 52. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 49. SetupComplete.cmd Exists
+    # 53. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 50. SetupComplete.cmd Has Self-Delete
+    # 54. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
