@@ -9,7 +9,7 @@
     - Applies curated registry pack and TrustedInstaller offline keys via NSudoLC.
     - Modifies IntegratedServicesRegionPolicySet.json in-place (worldwide Edge uninstall).
     - Generates OEM associations, Notepad shortcut, and self-deleting SetupComplete.cmd.
-    - Executes component cleanup (/ResetBase) and runs the 40-point validation suite.
+    - Executes component cleanup (/ResetBase), purges cache and temp files, and runs the 112-point validation suite.
 #>
 
 [CmdletBinding()]
@@ -110,6 +110,21 @@ function Remove-ForceFile([string]$targetFile) {
         & takeown.exe /f $targetFile /a *> $null
         & icacls.exe $targetFile /grant *S-1-5-32-544:F /c /q *> $null
         Remove-Item -Path $targetFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Clear-ForceDirectoryContents([string]$targetDir) {
+    if (Test-Path $targetDir) {
+        Get-ChildItem -Path $targetDir -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.PSIsContainer) {
+                Remove-ForceDirectory $_.FullName
+            } else {
+                Remove-ForceFile $_.FullName
+            }
+        }
+    }
+    if (-not (Test-Path $targetDir)) {
+        New-Item -ItemType Directory -Path $targetDir -Force -ErrorAction SilentlyContinue | Out-Null
     }
 }
 
@@ -1167,7 +1182,7 @@ exit
 Write-Success "Generated: $setupDir\SetupComplete.cmd (erases Scripts directory on completion)."
 
 # -------------------------------------------------------------
-# STEP 10: Component Cleanup (/ResetBase)
+# STEP 10: Component Cleanup (/ResetBase) & Offline Cache/Temp Purge
 # -------------------------------------------------------------
 if (-not $SkipCleanup) {
     Write-Step "[10/11] Running DISM Component Cleanup (/ResetBase)..."
@@ -1177,11 +1192,150 @@ if (-not $SkipCleanup) {
     Write-Info "Skipping component cleanup (-SkipCleanup specified)."
 }
 
+Write-Info "Purging offline cache and temporary files across 9 categories (NTLite cache.temp)..."
+
+# Category 1: Windows Update & SoftwareDistribution Cache
+$swDistDirs = @(
+    "$MountDir\Windows\SoftwareDistribution\Download",
+    "$MountDir\Windows\SoftwareDistribution\DataStore",
+    "$MountDir\Windows\SoftwareDistribution\PostRebootEventCache.V2",
+    "$MountDir\Windows\SoftwareDistribution\SLS"
+)
+foreach ($sdd in $swDistDirs) {
+    if (Test-Path $sdd) {
+        Clear-ForceDirectoryContents $sdd
+    }
+}
+if (Test-Path "$MountDir\Windows\SoftwareDistribution") {
+    $swDownload = "$MountDir\Windows\SoftwareDistribution\Download"
+    if (-not (Test-Path $swDownload)) {
+        New-Item -ItemType Directory -Path $swDownload -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+}
+
+# Category 2: Delivery Optimization (P2P Update Cache)
+$doDirs = @(
+    "$MountDir\Windows\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache",
+    "$MountDir\Windows\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Logs"
+)
+foreach ($dod in $doDirs) {
+    if (Test-Path $dod) {
+        Clear-ForceDirectoryContents $dod
+    }
+}
+
+# Category 3: CBS & DISM Servicing Logs
+$servicingLogFiles = @(
+    "$MountDir\Windows\Logs\CBS\CBS.log",
+    "$MountDir\Windows\Logs\DISM\dism.log"
+)
+foreach ($slf in $servicingLogFiles) {
+    if (Test-Path $slf) {
+        Remove-ForceFile $slf
+    }
+}
+if (Test-Path "$MountDir\Windows\Logs\CBS") {
+    Get-ChildItem -Path "$MountDir\Windows\Logs\CBS" -Filter "CbsPersist_*" -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-ForceFile $_.FullName
+    }
+}
+$servicingLogDirs = @(
+    "$MountDir\Windows\Logs\DPX",
+    "$MountDir\Windows\Logs\MoSetup"
+)
+foreach ($sld in $servicingLogDirs) {
+    if (Test-Path $sld) {
+        Remove-ForceDirectory $sld
+    }
+}
+
+# Category 4: Windows Setup, Sysprep & Panther Logs
+$pantherDirs = @(
+    "$MountDir\Windows\Panther",
+    "$MountDir\Windows\System32\sysprep\Panther"
+)
+foreach ($pd in $pantherDirs) {
+    if (Test-Path $pd) {
+        Remove-ForceDirectory $pd
+    }
+}
+if (Test-Path "$MountDir\Windows\inf") {
+    Get-ChildItem -Path "$MountDir\Windows\inf" -Filter "setupapi*.log" -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-ForceFile $_.FullName
+    }
+}
+
+# Category 5: Cryptographic Transaction Logs (catroot2 commit logs only, preserving catdb)
+if (Test-Path "$MountDir\Windows\System32\catroot2") {
+    Get-ChildItem -Path "$MountDir\Windows\System32\catroot2" -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+        $_.Extension -in @(".log", ".jrs", ".chk") -or $_.Name -like "edb*"
+    } | ForEach-Object {
+        if ($_.Name -notlike "*catdb*") {
+            Remove-ForceFile $_.FullName
+        }
+    }
+}
+
+# Category 6: Prefetch & ReadyBoot Cache
+if (Test-Path "$MountDir\Windows\Prefetch") {
+    Get-ChildItem -Path "$MountDir\Windows\Prefetch" -Filter "*.pf" -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-ForceFile $_.FullName
+    }
+    if (Test-Path "$MountDir\Windows\Prefetch\ReadyBoot") {
+        Get-ChildItem -Path "$MountDir\Windows\Prefetch\ReadyBoot" -Filter "*.fx" -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-ForceFile $_.FullName
+        }
+    }
+}
+
+# Category 7: Font & Shell Thumbnail/Icon Caches
+if (Test-Path "$MountDir\Windows\ServiceProfiles\LocalService\AppData\Local") {
+    Get-ChildItem -Path "$MountDir\Windows\ServiceProfiles\LocalService\AppData\Local" -Filter "FontCache*" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-ForceFile $_.FullName
+    }
+}
+if (Test-Path "$MountDir\Users\Default\AppData\Local\Microsoft\Windows\Explorer") {
+    Get-ChildItem -Path "$MountDir\Users\Default\AppData\Local\Microsoft\Windows\Explorer" -Filter "*cache*.db" -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-ForceFile $_.FullName
+    }
+}
+
+# Category 8: Error Reporting (WER) & Crash Dumps
+$werDirs = @(
+    "$MountDir\ProgramData\Microsoft\Windows\WER\ReportQueue",
+    "$MountDir\ProgramData\Microsoft\Windows\WER\ReportArchive",
+    "$MountDir\ProgramData\Microsoft\Windows\WER\Temp"
+)
+foreach ($wd in $werDirs) {
+    if (Test-Path $wd) {
+        Clear-ForceDirectoryContents $wd
+    }
+}
+$dumpItems = @(
+    "$MountDir\Windows\MEMORY.DMP",
+    "$MountDir\Windows\Minidump"
+)
+foreach ($di in $dumpItems) {
+    if (Test-Path $di) {
+        if ((Get-Item $di).PSIsContainer) {
+            Remove-ForceDirectory $di
+        } else {
+            Remove-ForceFile $di
+        }
+    }
+}
+
+# Category 9: System & User Temp Directories
+Clear-ForceDirectoryContents "$MountDir\Windows\Temp"
+Clear-ForceDirectoryContents "$MountDir\Users\Default\AppData\Local\Temp"
+
+Write-Success "Offline cache and temp files purged; root directory anchors preserved."
+
 # -------------------------------------------------------------
-# STEP 11: 107-Point Automated Quality Gate / Validation
+# STEP 11: 112-Point Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 107-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 112-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -1515,21 +1669,38 @@ if (-not $SkipValidation) {
     # 102. RetailDemo CloudExperienceHost Purged
     Assert-Check -Name "RetailDemo CloudExperienceHost Purged" -Pass (-not (Test-Path "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy\RetailDemo")) -Detail "Purged from CloudExperienceHost"
 
-    # 103. Region Policy In-Place Patch
+    # 103. SetupAPI Logs Purged
+    $setupapiCount = (Get-ChildItem "$MountDir\Windows\inf" -Filter "setupapi*.log" -File -ErrorAction SilentlyContinue).Count
+    Assert-Check -Name "SetupAPI Logs Purged" -Pass ($setupapiCount -eq 0) -Detail "setupapi*.log purged from Windows\inf"
+
+    # 104. Windows Temp Empty
+    $winTempCount = (Get-ChildItem "$MountDir\Windows\Temp" -Recurse -File -ErrorAction SilentlyContinue).Count
+    Assert-Check -Name "Windows Temp Empty" -Pass ($winTempCount -eq 0) -Detail "No temporary files remaining in Windows\Temp"
+
+    # 105. Windows Temp Directory Exists
+    Assert-Check -Name "Windows Temp Directory Exists" -Pass (Test-Path "$MountDir\Windows\Temp") -Detail "Root directory anchor preserved"
+
+    # 106. CBS Logs Purged
+    Assert-Check -Name "CBS Logs Purged" -Pass (-not (Test-Path "$MountDir\Windows\Logs\CBS\CBS.log")) -Detail "CBS.log deleted"
+
+    # 107. Panther Directory Purged
+    Assert-Check -Name "Panther Directory Purged" -Pass (-not (Test-Path "$MountDir\Windows\Panther")) -Detail "Windows\Panther directory purged"
+
+    # 108. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 104. OEMDefaultAssociations.xml
+    # 109. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 105. Notepad.lnk
+    # 110. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 106. SetupComplete.cmd Exists
+    # 111. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 107. SetupComplete.cmd Has Self-Delete
+    # 112. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
