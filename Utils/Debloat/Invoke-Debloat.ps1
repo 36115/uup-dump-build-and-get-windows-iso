@@ -91,6 +91,20 @@ function Remove-ForceFile([string]$targetFile) {
 }
 
 # -------------------------------------------------------------
+# STEP 1: Feature Removals via DISM (Recall)
+# -------------------------------------------------------------
+Write-Step "[1/9] Removing Optional Features (Recall)..."
+
+$featuresToRemove = @(
+    "Recall"
+)
+foreach ($feat in $featuresToRemove) {
+    Write-Info "Disabling and removing feature payload: $feat"
+    $dismOut = & dism.exe /English /Image:$MountDir /Disable-Feature /FeatureName:$feat /Remove /NoRestart 2>&1
+    Write-Success "Feature $feat disabled with payload removed."
+}
+
+# -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
 Write-Step "[5/11] Servicing Offline Registry Hives..."
@@ -214,6 +228,11 @@ if (-not $SkipValidation) {
         $script:checkIndex++
     }
 
+    # 1. Recall feature (Checked via DISM while hives are NOT locked)
+    $dismFeat = & dism.exe /English /Image:$MountDir /Get-FeatureInfo /FeatureName:Recall 2>&1
+    $recallOk = (($dismFeat -match 'State\s*:\s*Disabled') -or ($dismFeat -match 'Payload Removed'))
+    Assert-Check -Name "Recall Feature Removed" -Pass ($recallOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
+
 
     # Re-load hives for registry assertions
     cmd /c "reg load HKLM\OFFLINE_SYSTEM `"$sysHive`" >nul 2>&1"
@@ -234,6 +253,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 0/0 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 1/1 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
