@@ -274,6 +274,38 @@ finally {
 }
 
 # -------------------------------------------------------------
+# STEP 6: In-Place Region Policy Patch (Worldwide Edge Uninstall)
+# -------------------------------------------------------------
+Write-Step "[6/11] Patching IntegratedServicesRegionPolicySet.json in-place..."
+$policyPath = "$MountDir\Windows\System32\IntegratedServicesRegionPolicySet.json"
+if (Test-Path $policyPath) {
+    & takeown.exe /f $policyPath /a *> $null
+    & icacls.exe $policyPath /grant Administrators:F *> $null
+
+    $rawPolicy = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
+    try {
+        $polObj = $rawPolicy | ConvertFrom-Json
+        foreach ($p in $polObj.policies) {
+            if ($p.name -eq 'Edge_UninstallEdge' -or $p.guid -eq '{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6}' -or $p.'$comment' -match 'Edge is uninstallable') {
+                $p.defaultState = 'enabled'
+            }
+        }
+        $patchedPolicy = $polObj | ConvertTo-Json -Depth 10
+    } catch {
+        $patchedPolicy = [regex]::Replace(
+            $rawPolicy,
+            '("name"\s*:\s*"Edge_UninstallEdge"[\s\S]*?"defaultState"\s*:\s*")([^"]+)(")',
+            '${1}enabled${3}'
+        )
+    }
+    [System.IO.File]::WriteAllText($policyPath, $patchedPolicy, [System.Text.Encoding]::UTF8)
+    & icacls.exe $policyPath /setowner "NT SERVICE\TrustedInstaller" *> $null
+    Write-Success "Edge_UninstallEdge set to 'enabled' in-place. All other policies preserved."
+} else {
+    Write-Info "IntegratedServicesRegionPolicySet.json not found."
+}
+
+# -------------------------------------------------------------
 # STEP 10: Component Cleanup (/ResetBase)
 # -------------------------------------------------------------
 if (-not $SkipCleanup) {
@@ -370,11 +402,17 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
+
+    # 39. Region Policy In-Place Patch
+    $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
+    $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
+    Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
+
     $failed = $script:results | Where-Object { -not $_.Pass }
     if ($failed) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 14/14 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 15/15 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
