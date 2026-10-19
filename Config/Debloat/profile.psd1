@@ -37,5 +37,6 @@
         if ($targetOS -eq '11') { 'OS/Scripts/Remove-AIAndCloudServices.ps1' }
         'OS/Scripts/Remove-BrowsersAndEdgeComponents.ps1'
         'OS/Scripts/Remove-RemoteAccess.ps1'
+        'OS/Scripts/Optimize-DiskFootprint.ps1'
     ) | Where-Object { $_ }
 }
