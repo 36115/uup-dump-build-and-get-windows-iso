@@ -616,6 +616,37 @@ function Remove-RegMultiSzItem {
     }
 }
 
+function Remove-OfflineCapability {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $false)]
+        [string]$CapabilityName = "",
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$Pattern = @()
+    )
+    if ($CapabilityName) {
+        & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$CapabilityName /NoRestart *> $null
+        Write-Success "Removed capability: $CapabilityName"
+    } elseif ($Pattern -and $Pattern.Count -gt 0) {
+        try {
+            $installedCaps = @(Get-WindowsCapability -Path $MountDir -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Installed' })
+            foreach ($pat in $Pattern) {
+                $matching = $installedCaps | Where-Object { $_.Name -like $pat }
+                foreach ($c in $matching) {
+                    & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$($c.Name) /NoRestart *> $null
+                    Write-Success "Removed capability: $($c.Name)"
+                }
+            }
+        } catch {
+            Write-Warning "Capability discovery issue: $_"
+        }
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
