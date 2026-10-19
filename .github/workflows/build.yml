@@ -52,18 +52,18 @@ on:
         description: "Windows edition to build (when 'Build All Editions' is unchecked)"
         type: choice
         options:
-          - HomeSingleLanguage
-          - Home
-          - Pro
-          - Enterprise
           - Education
-          - ProfessionalWorkstation
-          - ProfessionalEducation
+          - Enterprise
+          - Home
+          - HomeSingleLanguage
           - IoTEnterprise
           - IoTEnterpriseK
-          - ServerRdsh
           - Multi
-        default: HomeSingleLanguage
+          - Pro
+          - ProfessionalEducation
+          - ProfessionalWorkstation
+          - ServerRdsh
+        default: Home
         required: true
       custom_editions:
         description: "Custom AIO edition list (optional comma-separated, e.g. Home, Pro, IoTEnterprise)"
