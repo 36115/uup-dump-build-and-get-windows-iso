@@ -109,23 +109,18 @@ if ($windowsTargetName -match 'beta|dev|wif|canary') {
 
 function Get-EditionInfo([string]$e) {
   switch ($e.ToLower()) {
-    "core"                    { [PSCustomObject]@{ Base = "Core"; Virtual = $null; Short = "Home"; Fancy = "Windows Home" } }
-    "home"                    { [PSCustomObject]@{ Base = "Core"; Virtual = $null; Short = "Home"; Fancy = "Windows Home" } }
-    "homesinglelanguage"      { [PSCustomObject]@{ Base = "Core"; Virtual = "CoreSingleLanguage"; Short = "HomeSL"; Fancy = "Windows Home Single Language" } }
-    "coresinglelanguage"      { [PSCustomObject]@{ Base = "Core"; Virtual = "CoreSingleLanguage"; Short = "HomeSL"; Fancy = "Windows Home Single Language" } }
-    "pro"                     { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = "Pro"; Fancy = "Windows Pro" } }
-    "professional"            { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = "Pro"; Fancy = "Windows Pro" } }
-    "professionalworkstation" { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalWorkstation"; Short = "ProWorkstation"; Fancy = "Windows Pro for Workstations" } }
-    "proworkstation"          { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalWorkstation"; Short = "ProWorkstation"; Fancy = "Windows Pro for Workstations" } }
-    "professionaleducation"   { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalEducation"; Short = "ProEducation"; Fancy = "Windows Pro Education" } }
-    "proeducation"            { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalEducation"; Short = "ProEducation"; Fancy = "Windows Pro Education" } }
-    "education"               { [PSCustomObject]@{ Base = "Professional"; Virtual = "Education"; Short = "Education"; Fancy = "Windows Education" } }
-    "enterprise"              { [PSCustomObject]@{ Base = "Professional"; Virtual = "Enterprise"; Short = "Enterprise"; Fancy = "Windows Enterprise" } }
-    "iotenterprise"           { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterprise"; Short = "IoTEnterprise"; Fancy = "Windows IoT Enterprise" } }
-    "iotenterprisek"          { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterpriseK"; Short = "IoTEnterpriseK"; Fancy = "Windows IoT Enterprise K" } }
-    "serverrdsh"              { [PSCustomObject]@{ Base = "Professional"; Virtual = "ServerRdsh"; Short = "ServerRdsh"; Fancy = "Windows Enterprise multi-session" } }
-    "multi"                   { [PSCustomObject]@{ Base = "Multi"; Virtual = $null; Short = "Multi"; Fancy = "Windows Multi-Edition" } }
-    default                   { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = $e; Fancy = "Windows $e" } }
+    { $_ -in "core", "home" }                                           { [PSCustomObject]@{ Base = "Core"; Virtual = $null; Short = "Home"; Fancy = "Windows Home" } }
+    { $_ -in "homesinglelanguage", "coresinglelanguage", "homesl" }     { [PSCustomObject]@{ Base = "Core"; Virtual = "CoreSingleLanguage"; Short = "HomeSL"; Fancy = "Windows Home Single Language" } }
+    { $_ -in "pro", "professional" }                                    { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = "Pro"; Fancy = "Windows Pro" } }
+    { $_ -in "professionalworkstation", "proworkstation" }              { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalWorkstation"; Short = "ProWorkstation"; Fancy = "Windows Pro for Workstations" } }
+    { $_ -in "professionaleducation", "proeducation" }                  { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalEducation"; Short = "ProEducation"; Fancy = "Windows Pro Education" } }
+    "education"                                                         { [PSCustomObject]@{ Base = "Professional"; Virtual = "Education"; Short = "Education"; Fancy = "Windows Education" } }
+    "enterprise"                                                        { [PSCustomObject]@{ Base = "Professional"; Virtual = "Enterprise"; Short = "Enterprise"; Fancy = "Windows Enterprise" } }
+    "iotenterprise"                                                     { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterprise"; Short = "IoTEnterprise"; Fancy = "Windows IoT Enterprise" } }
+    "iotenterprisek"                                                    { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterpriseK"; Short = "IoTEnterpriseK"; Fancy = "Windows IoT Enterprise K" } }
+    "serverrdsh"                                                        { [PSCustomObject]@{ Base = "Professional"; Virtual = "ServerRdsh"; Short = "ServerRdsh"; Fancy = "Windows Enterprise multi-session" } }
+    "multi"                                                             { [PSCustomObject]@{ Base = "Multi"; Virtual = $null; Short = "Multi"; Fancy = "Windows Multi-Edition" } }
+    default                                                             { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = $e; Fancy = "Windows $e" } }
   }
 }
 
@@ -443,7 +438,8 @@ function Get-WindowsIso($name, $destinationDirectory) {
   Patch-Aria2-Flags -CmdPath (Join-Path $buildDirectory 'uup_download_windows.cmd')
 
   # Raw log path
-  $rawLog = Join-Path $env:RUNNER_TEMP "uup_dism_aria2_raw.log"
+  $tempDir = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
+  $rawLog = Join-Path $tempDir "uup_dism_aria2_raw.log"
 
   choco install aria2 /y *> $null
 
