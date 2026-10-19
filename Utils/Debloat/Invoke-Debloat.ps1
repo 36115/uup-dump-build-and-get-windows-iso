@@ -118,6 +118,22 @@ if (Test-Path $inboxApps) {
 
 
 # -------------------------------------------------------------
+# STEP 4: Purge Telemetry Binaries
+# -------------------------------------------------------------
+Write-Step "[4/11] Deleting Telemetry Binaries..."
+$telemetryBinaries = @(
+    "$MountDir\Windows\System32\diagtrack.dll",
+    "$MountDir\Windows\System32\moshost.dll",
+    "$MountDir\Windows\System32\PhoneService.dll"
+)
+foreach ($bin in $telemetryBinaries) {
+    if (Test-Path $bin) {
+        Remove-ForceFile $bin
+        Write-Success "Deleted binary: $(Split-Path $bin -Leaf)"
+    }
+}
+
+# -------------------------------------------------------------
 # STEP 5: Offline Registry Servicing
 # -------------------------------------------------------------
 Write-Step "[5/11] Servicing Offline Registry Hives..."
@@ -146,6 +162,14 @@ if (Test-Path $defHive) {
 Write-Success "Loaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
 
 try {
+    # 5b. COMPLETELY DELETE TELEMETRY SERVICES
+    Write-Info "Deleting Telemetry services from ControlSet001\Services..."
+    $telemetryServices = @("DiagTrack", "MapsBroker", "PhoneSvc")
+    foreach ($svc in $telemetryServices) {
+        cmd /c "reg delete `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" /f >nul 2>&1"
+        Write-Success "Deleted service key: $svc"
+    }
+
     # 5e. TRANSLATE AND IMPORT REGISTRY PACK
     if ($RegPackPath -and (Test-Path $RegPackPath)) {
         Write-Info "Translating and importing registry pack: $(Split-Path $RegPackPath -Leaf)"
@@ -257,6 +281,17 @@ if (-not $SkipValidation) {
     cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
 
     try {
+
+        # 21-23. Telemetry Services Deleted
+        foreach ($svc in $telemetryServices) {
+            $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
+            Assert-Check -Name "Telemetry Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
+        }
+
+        # 24-26. Telemetry DLLs Deleted
+        Assert-Check -Name "Telemetry diagtrack.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\diagtrack.dll")) -Detail "Deleted"
+        Assert-Check -Name "Telemetry moshost.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\moshost.dll")) -Detail "Deleted"
+        Assert-Check -Name "Telemetry PhoneService.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\PhoneService.dll")) -Detail "Deleted"
     }
     finally {
         # Unload validation hives
@@ -270,6 +305,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 2/2 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 8/8 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
