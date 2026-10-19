@@ -96,9 +96,13 @@ function Remove-ForceFile([string]$targetFile) {
 # -------------------------------------------------------------
 # STEP 1: Feature Removals via DISM (Recall & Defender Definitions)
 # -------------------------------------------------------------
-Write-Step "[1/11] Removing Optional Features (Recall & Defender Definitions)..."
+Write-Step "[1/11] Removing Optional Features (Recall, Defender Definitions & Remote Desktop)..."
 
-$featuresToRemove = @("Recall", "Windows-Defender-Default-Definitions")
+$featuresToRemove = @(
+    "Recall",
+    "Windows-Defender-Default-Definitions",
+    "Microsoft-RemoteDesktopConnection"
+)
 foreach ($feat in $featuresToRemove) {
     Write-Info "Disabling and removing feature payload: $feat"
     $dismOut = & dism.exe /English /Image:$MountDir /Disable-Feature /FeatureName:$feat /Remove /NoRestart 2>&1
@@ -441,6 +445,18 @@ $shortcut.Save()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
 Write-Success "Created shortcut: $accDir\Notepad.lnk"
 
+# Remove Remote Desktop Connection shortcuts if present
+$rdcShortcuts = @(
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Remote Desktop Connection.lnk",
+    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Remote Desktop Connection.lnk"
+)
+foreach ($lnk in $rdcShortcuts) {
+    if (Test-Path $lnk) {
+        Remove-ForceFile $lnk
+        Write-Success "Deleted shortcut: $(Split-Path $lnk -Leaf)"
+    }
+}
+
 # -------------------------------------------------------------
 # STEP 9: Generate Self-Deleting SetupComplete.cmd
 # -------------------------------------------------------------
@@ -505,16 +521,21 @@ if (-not $SkipValidation) {
     $recallOk = (($dismFeat -match 'State\s*:\s*Disabled') -or ($dismFeat -match 'Payload Removed'))
     Assert-Check -Name "Recall Feature Removed" -Pass ($recallOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
 
-    # 2. InboxApps
+    # 2. Remote Desktop Connection feature
+    $dismRdc = & dism.exe /English /Image:$MountDir /Get-FeatureInfo /FeatureName:Microsoft-RemoteDesktopConnection 2>&1
+    $rdcOk = (($dismRdc -match 'State\s*:\s*Disabled') -or ($dismRdc -match 'Payload Removed') -or ($LASTEXITCODE -ne 0))
+    Assert-Check -Name "Remote Desktop Connection Removed" -Pass ($rdcOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
+
+    # 3. InboxApps
     Assert-Check -Name "InboxApps Purged" -Pass (-not (Test-Path "$MountDir\Windows\InboxApps")) -Detail "Directory does not exist"
 
-    # 3-6. Defender Folders Deleted
+    # 4-7. Defender Folders Deleted
     Assert-Check -Name "Defender Program Files" -Pass (-not (Test-Path "$MountDir\Program Files\Windows Defender")) -Detail "Deleted"
     Assert-Check -Name "Defender x86" -Pass (-not (Test-Path "$MountDir\Program Files (x86)\Windows Defender")) -Detail "Deleted"
     Assert-Check -Name "Defender ProgramData" -Pass (-not (Test-Path "$MountDir\ProgramData\Microsoft\Windows Defender")) -Detail "Deleted"
     Assert-Check -Name "Defender Drivers (wd)" -Pass (-not (Test-Path "$MountDir\Windows\System32\drivers\wd")) -Detail "Deleted"
 
-    # 7-12. SmartScreen, BrowserCore & OneDrive Binaries / Folders Deleted
+    # 8-13. SmartScreen, BrowserCore & OneDrive Binaries / Folders Deleted
     Assert-Check -Name "SmartScreen smartscreen.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\smartscreen.exe")) -Detail "Deleted"
     Assert-Check -Name "SmartScreen smartscreen.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\smartscreen.dll")) -Detail "Deleted"
     $appRepRemaining = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "Microsoft.Windows.AppRep.ChxApp_*" -Directory -ErrorAction SilentlyContinue
@@ -529,60 +550,60 @@ if (-not $SkipValidation) {
     cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
 
     try {
-        # 13-21. ALL 9 Defender Services Deleted
+        # 14-22. ALL 9 Defender Services Deleted
         foreach ($svc in $defenderServices) {
             $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
             Assert-Check -Name "Defender Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
         }
 
-        # 22-24. Telemetry Services Deleted
+        # 23-25. Telemetry Services Deleted
         foreach ($svc in $telemetryServices) {
             $q = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\$svc`" >nul 2>&1"
             Assert-Check -Name "Telemetry Service $svc" -Pass ($LASTEXITCODE -ne 0) -Detail "Completely deleted from registry"
         }
 
-        # 25-27. Telemetry DLLs Deleted
+        # 26-28. Telemetry DLLs Deleted
         Assert-Check -Name "Telemetry diagtrack.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\diagtrack.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry moshost.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\moshost.dll")) -Detail "Deleted"
         Assert-Check -Name "Telemetry PhoneService.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\PhoneService.dll")) -Detail "Deleted"
 
-        # 28. PlugPlay Service Disabled
+        # 29. PlugPlay Service Disabled
         $ppVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\PlugPlay`" /v Start 2>nul"
         Assert-Check -Name "PlugPlay Start=4" -Pass ($ppVal -match '0x4') -Detail "Disabled"
 
-        # 29. Spooler Service Manual
+        # 30. Spooler Service Manual
         $spVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\Spooler`" /v Start 2>nul"
         Assert-Check -Name "Spooler Start=3" -Pass ($spVal -match '0x3') -Detail "Manual"
 
-        # 30. lfsvc Disabled
+        # 31. lfsvc Disabled
         $lfVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\lfsvc`" /v Start 2>nul"
         Assert-Check -Name "lfsvc Start=4" -Pass ($lfVal -match '0x4') -Detail "Disabled"
 
-        # 31. RemoteRegistry Disabled
+        # 32. RemoteRegistry Disabled
         $rrVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\RemoteRegistry`" /v Start 2>nul"
         Assert-Check -Name "RemoteRegistry Start=4" -Pass ($rrVal -match '0x4') -Detail "Disabled"
 
-        # 32. DPS Disabled
+        # 33. DPS Disabled
         $dpsVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Services\DPS`" /v Start 2>nul"
         Assert-Check -Name "DPS Start=4" -Pass ($dpsVal -match '0x4') -Detail "Disabled"
 
-        # 33. ConfigureChatAutoInstall
+        # 34. ConfigureChatAutoInstall
         $chatVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Communications`" /v ConfigureChatAutoInstall 2>nul"
         Assert-Check -Name "ConfigureChatAutoInstall=0" -Pass ($chatVal -match '0x0') -Detail "Applied"
 
-        # 34. SmartScreenEnabled=off in Explorer
+        # 35. SmartScreenEnabled=off in Explorer
         $ssVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer`" /v SmartScreenEnabled 2>nul"
         Assert-Check -Name "SmartScreenEnabled=off" -Pass ($ssVal -match 'off') -Detail "Disabled in Explorer"
 
-        # 35. EnableSmartScreen=0 in System Policies
+        # 36. EnableSmartScreen=0 in System Policies
         $essVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\System`" /v EnableSmartScreen 2>nul"
         Assert-Check -Name "EnableSmartScreen=0" -Pass ($essVal -match '0x0') -Detail "Disabled in System Policies"
 
-        # 36. BrowserCore Registrations Purged
+        # 37. BrowserCore Registrations Purged
         $bcVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore`" 2>nul"
         Assert-Check -Name "BrowserCore Chrome Registration" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from NativeMessagingHosts"
 
-        # 37. Preserved HttpAcceptLanguageOptOut
+        # 38. Preserved HttpAcceptLanguageOptOut
         $langVal1 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Control Panel\International\User Profile`" /v HttpAcceptLanguageOptOut 2>nul"
         $langVal2 = cmd /c "reg query `"HKU\OFFLINE_DEFAULT\Software\Microsoft\Windows\CurrentVersion\RunOnce`" /v `"Telemetry Language Disable`" 2>nul"
         $langVal3 = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Control Panel\International`" /v UserHttpAcceptLanguageOptOut 2>nul"
@@ -596,21 +617,21 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 38. Region Policy In-Place Patch
+    # 39. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 39. OEMDefaultAssociations.xml
+    # 40. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 40. Notepad.lnk
+    # 41. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 41. SetupComplete.cmd Exists
+    # 42. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 42. SetupComplete.cmd Has Self-Delete
+    # 43. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
@@ -619,6 +640,6 @@ if (-not $SkipValidation) {
         throw "Quality Gate FAILED: $($failed.Count) checks failed!"
     }
     Write-Host "`n============================================================" -ForegroundColor Green
-    Write-Host " QUALITY GATE RESULT: 42/42 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
+    Write-Host " QUALITY GATE RESULT: 43/43 CHECKS PASSED (100% SUCCESS)    " -ForegroundColor Green
     Write-Host "============================================================`n" -ForegroundColor Green
 }
