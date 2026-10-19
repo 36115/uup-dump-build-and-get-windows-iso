@@ -107,6 +107,16 @@ foreach ($feat in $featuresToRemove) {
     Write-Success "Feature $feat disabled with payload removed."
 }
 
+# Remove Provisioned Copilot AppX Package
+Write-Info "Checking for provisioned Copilot AppX package..."
+$copilotInfo = & dism.exe /English /Image:$MountDir /Get-ProvisionedAppxPackages 2>&1
+$copilotMatch = $copilotInfo | Select-String "Microsoft.Copilot_"
+if ($copilotMatch) {
+    $copilotPkgName = ($copilotMatch.Line -split 'PackageName : ')[1].Trim()
+    & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$copilotPkgName /NoRestart *> $null
+    Write-Success "Removed provisioned AppX package: $copilotPkgName"
+}
+
 # -------------------------------------------------------------
 # STEP 2: Purge Windows\InboxApps
 # -------------------------------------------------------------
@@ -377,6 +387,20 @@ try {
             cmd /c "reg add `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\WMI\Autologger\$logger`" /v Start /t REG_DWORD /d 0 /f >nul 2>&1"
         }
         Write-Success "Purged sysmon COM classes, PLA tasks, and disabled telemetry AutoLoggers."
+
+        # 5l. PURGE COREAI SYSTEMAPP REGISTRATION & ENFORCE WINDOWS AI POLICIES (NTLite CoreAIComponents)
+        Write-Info "Purging CoreAI InboxApplications registration and enforcing AI policies..."
+        $inboxCoreAi = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"MicrosoftWindows.Client.CoreAI`" 2>nul" | Select-String "HKEY_"
+        foreach ($line in $inboxCoreAi) {
+            $key = $line.Line.Trim()
+            cmd /c "reg delete `"$key`" /f >nul 2>&1"
+        }
+
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsAI`" /v DisableAIDataAnalysis /t REG_DWORD /d 1 /f >nul 2>&1"
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsAI`" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f >nul 2>&1"
+        cmd /c "reg add `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f >nul 2>&1"
+        cmd /c "reg add `"HKU\OFFLINE_DEFAULT\Software\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f >nul 2>&1"
+        Write-Success "Purged CoreAI InboxApplications and enforced WindowsAI/Copilot disabled policies."
     }
 }
 finally {
@@ -654,6 +678,18 @@ if (-not $SkipValidation) {
         # 43. Telemetry AutoLogger Diagtrack-Listener Start=0
         $diagVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\WMI\Autologger\Diagtrack-Listener`" /v Start 2>nul"
         Assert-Check -Name "AutoLogger Diagtrack-Listener Start=0" -Pass ($diagVal -match '0x0') -Detail "Disabled"
+
+        # 44. CoreAI InboxApplications Purged
+        $coreAiReg = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications`" /f `"MicrosoftWindows.Client.CoreAI`" 2>nul" | Select-String "HKEY_"
+        Assert-Check -Name "CoreAI InboxApplications Purged" -Pass ($coreAiReg.Count -eq 0) -Detail "Purged from AppxAllUserStore"
+
+        # 45. WindowsAI Policy DisableAIDataAnalysis=1
+        $aiVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsAI`" /v DisableAIDataAnalysis 2>nul"
+        Assert-Check -Name "WindowsAI DisableAIDataAnalysis=1" -Pass ($aiVal -match '0x1') -Detail "Applied"
+
+        # 46. WindowsCopilot Policy TurnOffWindowsCopilot=1
+        $copilotVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot`" /v TurnOffWindowsCopilot 2>nul"
+        Assert-Check -Name "WindowsCopilot TurnOffWindowsCopilot=1" -Pass ($copilotVal -match '0x1') -Detail "Applied"
     }
     finally {
         # Unload validation hives
@@ -662,60 +698,70 @@ if (-not $SkipValidation) {
         cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
     }
 
-    # 44. Defender SecurityHealthSystray
+    # 47. Defender SecurityHealthSystray
     Assert-Check -Name "Defender SecurityHealthSystray" -Pass (-not (Test-Path "$MountDir\Windows\System32\SecurityHealthSystray.exe")) -Detail "Deleted"
 
-    # 45. Firewall Binary mpssvc.dll Intact
+    # 48. Firewall Binary mpssvc.dll Intact
     Assert-Check -Name "Firewall Binary mpssvc.dll" -Pass (Test-Path "$MountDir\Windows\System32\mpssvc.dll") -Detail "Preserved"
 
-    # 46. Firewall MMC wf.msc Intact
+    # 49. Firewall MMC wf.msc Intact
     Assert-Check -Name "Firewall MMC wf.msc" -Pass (Test-Path "$MountDir\Windows\System32\wf.msc") -Detail "Preserved"
 
-    # 47. .NET NativeImages 64 Cache
+    # 50. .NET NativeImages 64 Cache
     Assert-Check -Name ".NET NativeImages 64 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_64")) -Detail "Deleted"
 
-    # 48. .NET NativeImages 32 Cache
+    # 51. .NET NativeImages 32 Cache
     Assert-Check -Name ".NET NativeImages 32 Cache" -Pass (-not (Test-Path "$MountDir\Windows\assembly\NativeImages_v4.0.30319_32")) -Detail "Deleted"
 
-    # 49. .NET GAC_MSIL Preserved
+    # 52. .NET GAC_MSIL Preserved
     Assert-Check -Name ".NET GAC_MSIL Preserved" -Pass (Test-Path "$MountDir\Windows\Microsoft.NET\assembly\GAC_MSIL") -Detail "Intact (MSIL preserved)"
 
-    # 50. WinSAT Binary System32 Deleted
+    # 53. WinSAT Binary System32 Deleted
     Assert-Check -Name "WinSAT Binary System32" -Pass (-not (Test-Path "$MountDir\Windows\System32\WinSAT.exe")) -Detail "Deleted"
 
-    # 51. WinSAT Performance Directory Purged
+    # 54. WinSAT Performance Directory Purged
     Assert-Check -Name "WinSAT Performance Directory" -Pass (-not (Test-Path "$MountDir\Windows\Performance\WinSAT")) -Detail "Purged"
 
-    # 52. System Monitor sysmon.ocx Deleted
+    # 55. System Monitor sysmon.ocx Deleted
     Assert-Check -Name "System Monitor sysmon.ocx" -Pass (-not (Test-Path "$MountDir\Windows\System32\sysmon.ocx")) -Detail "Deleted"
 
-    # 53. Performance Monitor perfmon.exe Deleted
+    # 56. Performance Monitor perfmon.exe Deleted
     Assert-Check -Name "Performance Monitor perfmon.exe" -Pass (-not (Test-Path "$MountDir\Windows\System32\perfmon.exe")) -Detail "Deleted"
 
-    # 54. Resource Monitor resmon.exe Preserved
+    # 57. Resource Monitor resmon.exe Preserved
     Assert-Check -Name "Resource Monitor resmon.exe Preserved" -Pass (Test-Path "$MountDir\Windows\System32\resmon.exe") -Detail "Preserved"
 
-    # 55. Kernel Debug Transport kdnet.dll Deleted
+    # 58. Kernel Debug Transport kdnet.dll Deleted
     Assert-Check -Name "Kernel Debug Transport kdnet.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\kdnet.dll")) -Detail "Deleted"
 
-    # 57. Kernel Debug Stub kdcom.dll Preserved
-    Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
+    # 60. Kernel Debug Stub kdcom.dll Preserved    Assert-Check -Name "Kernel Debug Stub kdcom.dll Preserved" -Pass (Test-Path "$MountDir\Windows\System32\kdcom.dll") -Detail "Intact (Prevents STOP 0x6B)"
 
-    # 58. Region Policy In-Place Patch
+    # 61. CoreAI SystemApp Purged
+    $coreAiRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CoreAI_*" -Directory -ErrorAction SilentlyContinue
+    Assert-Check -Name "CoreAI SystemApp Purged" -Pass ($coreAiRem.Count -eq 0) -Detail "Purged from SystemApps"
+
+    # 62. CoreAI onnxruntime.dll Deleted
+    Assert-Check -Name "CoreAI onnxruntime.dll" -Pass (-not (Test-Path "$MountDir\Windows\System32\onnxruntime.dll")) -Detail "Deleted"
+
+    # 63. Base Client.CBS Preserved
+    $cbsRem = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "MicrosoftWindows.Client.CBS_*" -Directory -ErrorAction SilentlyContinue
+    Assert-Check -Name "Base Client.CBS Preserved" -Pass ($cbsRem.Count -gt 0) -Detail "Intact (Taskbar/Explorer preserved)"
+
+    # 64. Region Policy In-Place Patch
     $polContent = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
     $hasEdgeUninstall = ($polContent -match 'Edge_UninstallEdge' -or $polContent -match '\{1bca278a-5d11-4acf-ad2f-f9ab6d7f93a6\}' -or $polContent -match 'Edge is uninstallable') -and ($polContent -match '"defaultState"\s*:\s*"enabled"')
     Assert-Check -Name "Region Policy In-Place" -Pass $hasEdgeUninstall -Detail "Enabled in-place"
 
-    # 59. OEMDefaultAssociations.xml
+    # 65. OEMDefaultAssociations.xml
     Assert-Check -Name "OEMDefaultAssociations.xml" -Pass (Test-Path "$MountDir\Windows\System32\OEMDefaultAssociations.xml") -Detail "Staged"
 
-    # 60. Notepad.lnk
+    # 66. Notepad.lnk
     Assert-Check -Name "Notepad.lnk" -Pass (Test-Path "$accDir\Notepad.lnk") -Detail "Created"
 
-    # 61. SetupComplete.cmd Exists
+    # 67. SetupComplete.cmd Exists
     Assert-Check -Name "SetupComplete.cmd Exists" -Pass (Test-Path "$setupDir\SetupComplete.cmd") -Detail "Staged"
 
-    # 62. SetupComplete.cmd Has Self-Delete
+    # 68. SetupComplete.cmd Has Self-Delete
     $scText = [System.IO.File]::ReadAllText("$setupDir\SetupComplete.cmd", [System.Text.Encoding]::ASCII)
     Assert-Check -Name "SetupComplete Self-Delete" -Pass ($scText -match 'rd /s /q "%WINDIR%\\Setup\\Scripts"') -Detail "Contains directory self-deletion"
 
