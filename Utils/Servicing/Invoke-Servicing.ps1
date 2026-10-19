@@ -625,6 +625,26 @@ function Set-OfflineRegionPolicy {
 }
 
 
+function Remove-RegMultiSzItem {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$Key,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string]$ValueName,
+
+        [Parameter(Mandatory = $true, Position = 2)]
+        [string]$Item
+    )
+    $currentVal = Get-RegValue -Key $Key -ValueName $ValueName
+    if ($currentVal -and $currentVal -match [regex]::Escape($Item)) {
+        $items = ($currentVal -split '\\0') | Where-Object { $_ -ne $Item -and $_.Trim() -ne "" }
+        $newVal = if ($items.Count -gt 0) { ($items -join '\0') + '\0' } else { "" }
+        Set-RegValue $Key $ValueName $newVal "REG_MULTI_SZ"
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
