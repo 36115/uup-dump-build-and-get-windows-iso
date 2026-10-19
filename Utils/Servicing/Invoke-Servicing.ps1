@@ -69,6 +69,8 @@ if (-not $ProfileDir -and $ProfileName) {
         $ProfileDir = Resolve-ProfileDir -ProfileName $ProfileName -RepoRoot $repo
     }
 }
+    }
+}
 
 # Resolve profile hierarchy if profile.psd1 is present
 $profileChain = if ($ProfileDir -and (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
@@ -366,7 +368,6 @@ function Get-RegSubKey {
 }
 
 
-
 function Remove-ScheduledTask {
     [CmdletBinding()]
     param(
@@ -413,6 +414,33 @@ function Remove-ScheduledTask {
 }
 
 
+function Remove-ForceFilesByPattern {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string[]]$Path,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string[]]$Pattern,
+
+        [switch]$Recurse
+    )
+    foreach ($p in $Path) {
+        if (-not (Test-Path $p)) { continue }
+        foreach ($pat in $Pattern) {
+            $gciParams = @{
+                Path        = $p
+                Filter      = $pat
+                File        = $true
+                ErrorAction = 'SilentlyContinue'
+            }
+            if ($Recurse) { $gciParams['Recurse'] = $true }
+            Get-ChildItem @gciParams | ForEach-Object {
+                Remove-ForceFile $_.FullName
+            }
+        }
+    }
+}
 
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
@@ -612,3 +640,4 @@ Set-Location $env:TEMP
 [System.GC]::Collect()
 [System.GC]::WaitForPendingFinalizers()
 Start-Sleep -Milliseconds 500
+
