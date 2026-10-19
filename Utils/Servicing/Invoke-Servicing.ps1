@@ -484,6 +484,27 @@ function Remove-ForceFilesByPattern {
     }
 }
 
+function Disable-OfflineFeature {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string]$FeatureName,
+
+        [switch]$Remove
+    )
+    $args = @("/English", "/Image:$MountDir", "/Disable-Feature", "/FeatureName:$FeatureName", "/NoRestart")
+    if ($Remove) { $args += "/Remove" }
+    $res = & dism.exe @args 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Feature $FeatureName disabled$([string](if ($Remove) { ' with payload removed' } else { '' }))."
+    } else {
+        Write-Warning "Failed to disable feature $FeatureName : $res"
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
