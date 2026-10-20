@@ -1073,6 +1073,10 @@ try {
         # Smart App Control (SAC) CI Policy Neutralization (SYSTEM hive)
         cmd /c "reg add `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\CI\Policy`" /v VerifiedAndReputablePolicyState /t REG_DWORD /d 0 /f >nul 2>&1"
 
+        # Neutralize SmartScreen Shell Extension COM Class registrations
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{25442526-787D-42FE-AE70-BD2A56230B0B}`" /f >nul 2>&1"
+        cmd /c "reg delete `"HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{08B9B184-7546-4FE0-9B4B-F33EC3108B8F}`" /f >nul 2>&1"
+
         # BrowserCore Native Messaging Hosts (Chrome, Edge, Firefox in HKLM, WOW6432Node, and Default Profile)
         $nativeHosts = @(
             "HKLM\OFFLINE_SOFTWARE\Google\Chrome\NativeMessagingHosts\com.microsoft.browsercore",
@@ -2003,7 +2007,11 @@ if (-not $SkipValidation) {
         $sacVal = cmd /c "reg query `"HKLM\OFFLINE_SYSTEM\ControlSet001\Control\CI\Policy`" /v VerifiedAndReputablePolicyState 2>nul"
         Assert-Check -Name "Smart App Control State=0" -Pass ($sacVal -match '0x0') -Detail "Permanently Disabled in CI Policy"
 
-        # 46. AppHost EnableWebContentEvaluation=0
+        # 46. SmartScreen Shell CLSID Purged
+        $ssClsidVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Classes\CLSID\{25442526-787D-42FE-AE70-BD2A56230B0B}`" 2>nul"
+        Assert-Check -Name "SmartScreen Shell CLSID Purged" -Pass ($LASTEXITCODE -ne 0) -Detail "Purged from Software Classes\CLSID"
+
+        # 47. AppHost EnableWebContentEvaluation=0
         $appHostVal = cmd /c "reg query `"HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\AppHost`" /v EnableWebContentEvaluation 2>nul"
         Assert-Check -Name "AppHost EnableWebContentEvaluation=0" -Pass ($appHostVal -match '0x0') -Detail "Disabled Web Content Evaluation"
 
