@@ -142,7 +142,7 @@ if (-not $cdimageExe) {
   $cdCmd = Get-Command cdimage.exe -ErrorAction SilentlyContinue
   if ($cdCmd) { $cdimageExe = $cdCmd.Source }
 }
-if (-not $cdimageExe) {
+if (-not $cdimageExe -and $env:RUNNER_TEMP) {
   # Look in Runner temp or choco
   $cdimageCandidate = Join-Path $env:RUNNER_TEMP "cdimage.exe"
   if (Test-Path $cdimageCandidate) { $cdimageExe = $cdimageCandidate }
@@ -158,8 +158,8 @@ $verbuild = "AIO"
 if ($firstJson) {
   try {
     $meta = Get-Content $firstJson.FullName -Raw | ConvertFrom-Json
-    if ($meta.build)   { $buildNumber = $meta.build }
-    if ($meta.version) { $verbuild = $meta.version }
+    if ($meta.PSObject.Properties['build'] -and $meta.build)     { $buildNumber = $meta.build }
+    if ($meta.PSObject.Properties['version'] -and $meta.version) { $verbuild = $meta.version }
   } catch {}
 }
 
@@ -198,7 +198,16 @@ $isoMetadata = [PSCustomObject]@{
   build      = $buildNumber
   version    = $verbuild
   checksum   = $isoChecksum
-  images     = @($finalImages | ForEach-Object { [PSCustomObject]@{ index = $_.ImageIndex; name = $_.ImageName; version = $_.Version } })
+  images     = @($finalImages | ForEach-Object {
+    $imgVer = $verbuild
+    try {
+      $detailed = Get-WindowsImage -ImagePath $finalMediaFile -Index $_.ImageIndex
+      if ($detailed.PSObject.Properties['MajorVersion'] -and $detailed.MajorVersion) {
+        $imgVer = "$($detailed.MajorVersion).$($detailed.MinorVersion).$($detailed.Build).$($detailed.SPBuild)"
+      }
+    } catch {}
+    [PSCustomObject]@{ index = $_.ImageIndex; name = $_.ImageName; version = $imgVer }
+  })
 }
 $isoMetadata | ConvertTo-Json -Depth 5 | Set-Content -Path "$createdIsoPath.json"
 

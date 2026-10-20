@@ -293,7 +293,12 @@ function Get-IsoWindowsImages($isoPath) {
     Write-CleanLine "Getting Windows images from $installPath"
     Get-WindowsImage -ImagePath $installPath | ForEach-Object {
       $image = Get-WindowsImage -ImagePath $installPath -Index $_.ImageIndex
-      [PSCustomObject]@{ index = $image.ImageIndex; name = $image.ImageName; version = $image.Version }
+      $imgVer = if ($image.PSObject.Properties['MajorVersion'] -and $image.MajorVersion) {
+        "$($image.MajorVersion).$($image.MinorVersion).$($image.Build).$($image.SPBuild)"
+      } elseif ($image.PSObject.Properties['Version'] -and $image.Version) {
+        $image.Version
+      } else { "" }
+      [PSCustomObject]@{ index = $image.ImageIndex; name = $image.ImageName; version = $imgVer }
     }
   }
   finally {
@@ -619,7 +624,16 @@ function Get-WindowsIso($name, $destinationDirectory) {
         build      = $iso.build
         version    = $verbuild
         wimFile    = $outWimName
-        images     = @($wimImages | ForEach-Object { [PSCustomObject]@{ index = $_.ImageIndex; name = $_.ImageName; version = $_.Version } })
+        images     = @($wimImages | ForEach-Object {
+          $imgVer = $verbuild
+          try {
+            $detailed = Get-WindowsImage -ImagePath $outWimPath -Index $_.ImageIndex
+            if ($detailed.PSObject.Properties['MajorVersion'] -and $detailed.MajorVersion) {
+              $imgVer = "$($detailed.MajorVersion).$($detailed.MinorVersion).$($detailed.Build).$($detailed.SPBuild)"
+            }
+          } catch {}
+          [PSCustomObject]@{ index = $_.ImageIndex; name = $_.ImageName; version = $imgVer }
+        })
       }
       $wimMetadata | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $destinationDirectory "$name-$($edInfo.Short).json")
 
