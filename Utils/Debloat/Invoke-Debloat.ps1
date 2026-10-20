@@ -9,7 +9,7 @@
     - Applies curated registry pack and TrustedInstaller offline keys via NSudoLC.
     - Modifies IntegratedServicesRegionPolicySet.json in-place (worldwide Edge uninstall).
     - Generates OEM associations, Notepad shortcut, and self-deleting SetupComplete.cmd.
-    - Executes component cleanup (/ResetBase), purges cache/temp/WER/insights/IE/RemoteRegistry/RDP32/EdgeDevTools, neutralizes CrossDeviceResume/CDP, and runs the 177-point validation suite.
+    - Executes component cleanup (/ResetBase), purges cache/temp/WER/insights/IE/RemoteRegistry/RDP32/EdgeDevTools/Capabilities/WMP, neutralizes CrossDeviceResume/CDP, and runs the 183-point validation suite.
 #>
 
 [CmdletBinding()]
@@ -145,12 +145,16 @@ function Invoke-ElevatedRegDelete([string[]]$regKeys) {
 # -------------------------------------------------------------
 # STEP 1: Feature Removals via DISM (Recall & Defender Definitions)
 # -------------------------------------------------------------
-Write-Step "[1/11] Removing Optional Features (Recall, Defender Definitions & Remote Desktop)..."
+Write-Step "[1/11] Removing Optional Features (Recall, Defender Definitions, Remote Desktop, Windows Media Player & FODs)..."
 
 $featuresToRemove = @(
     "Recall",
     "Windows-Defender-Default-Definitions",
-    "Microsoft-RemoteDesktopConnection"
+    "Microsoft-RemoteDesktopConnection",
+    "WindowsMediaPlayer",
+    "TFTP",
+    "WCF-TCP-PortSharing45",
+    "MSMQ-Container"
 )
 foreach ($feat in $featuresToRemove) {
     Write-Info "Disabling and removing feature payload: $feat"
@@ -170,12 +174,31 @@ foreach ($line in $provMatches) {
     }
 }
 
-# Remove Internet Explorer capability if present (NTLite internetexplorer / internetexplorer32)
-Write-Info "Checking for Internet Explorer capability (Browser.InternetExplorer)..."
-$ieCapOut = & dism.exe /English /Image:$MountDir /Get-CapabilityInfo /CapabilityName:Browser.InternetExplorer~~~~0.0.11.0 2>&1
-if ($ieCapOut -match 'State\s*:\s*Installed') {
-    & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:Browser.InternetExplorer~~~~0.0.11.0 /NoRestart *> $null
-    Write-Success "Removed capability: Browser.InternetExplorer~~~~0.0.11.0"
+# Remove Windows Capabilities (FODs - Speech, Handwriting, TextToSpeech, MathRecognizer, StepsRecorder, OpenSSH, IE)
+Write-Info "Scanning and removing Windows Capabilities (FOD)..."
+$capPatterns = @(
+    "Browser.InternetExplorer*",
+    "Language.Handwriting*",
+    "Language.Speech*",
+    "Language.TextToSpeech*",
+    "Language.OCR*",
+    "MathRecognizer*",
+    "App.StepsRecorder*",
+    "OpenSSH.Client*",
+    "Hello.Face*"
+)
+try {
+    $installedCaps = @(Get-WindowsCapability -Path $MountDir -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Installed' })
+    foreach ($pattern in $capPatterns) {
+        $matching = $installedCaps | Where-Object { $_.Name -like $pattern }
+        foreach ($c in $matching) {
+            Write-Info "Removing capability: $($c.Name)"
+            & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$($c.Name) /NoRestart *> $null
+            Write-Success "Removed capability: $($c.Name)"
+        }
+    }
+} catch {
+    Write-Warning "PowerShell capability discovery encountered an issue: $_. Proceeding."
 }
 
 # -------------------------------------------------------------
@@ -694,7 +717,12 @@ $insightsDirs = @(
     "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Device Information",
     "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
     "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Customer Experience Improvement Program"
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Customer Experience Improvement Program",
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Kernel\La57Cleanup",
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Maintenance\WinSAT",
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\RemoteAssistance\RemoteAssistanceTask",
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Windows Media Sharing\UpdateLibrary",
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Work Folders"
 )
 foreach ($dir in $insightsDirs) {
     if (Test-Path $dir) {
@@ -1889,7 +1917,7 @@ Write-Success "Offline cache and temp files purged; root directory anchors prese
 # STEP 11: Automated Quality Gate / Validation
 # -------------------------------------------------------------
 if (-not $SkipValidation) {
-    Write-Step "[11/11] Running 177-Point Quality Gate Validation..."
+    Write-Step "[11/11] Running 183-Point Quality Gate Validation..."
 
     $script:checkIndex = 1
     $script:results = @()
@@ -1917,7 +1945,32 @@ if (-not $SkipValidation) {
     $rdcOk = (($dismRdc -match 'State\s*:\s*Disabled') -or ($dismRdc -match 'Payload Removed') -or ($LASTEXITCODE -ne 0))
     Assert-Check -Name "Remote Desktop Connection Removed" -Pass ($rdcOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
 
-    # 3. InboxApps
+    # 3. Windows Media Player feature
+    $dismWmp = & dism.exe /English /Image:$MountDir /Get-FeatureInfo /FeatureName:WindowsMediaPlayer 2>&1
+    $wmpOk = (($dismWmp -match 'State\s*:\s*Disabled') -or ($dismWmp -match 'Payload Removed') -or ($LASTEXITCODE -ne 0))
+    Assert-Check -Name "Windows Media Player Removed" -Pass ($wmpOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
+
+    # 4. TFTP feature
+    $dismTftp = & dism.exe /English /Image:$MountDir /Get-FeatureInfo /FeatureName:TFTP 2>&1
+    $tftpOk = (($dismTftp -match 'State\s*:\s*Disabled') -or ($dismTftp -match 'Payload Removed') -or ($LASTEXITCODE -ne 0))
+    Assert-Check -Name "TFTP Feature Removed" -Pass ($tftpOk.Count -gt 0) -Detail "State is Disabled / Payload Removed"
+
+    # 5. MathRecognizer Capability
+    $dismMath = & dism.exe /English /Image:$MountDir /Get-CapabilityInfo /CapabilityName:MathRecognizer~~~~0.0.1.0 2>&1
+    $mathOk = (($dismMath -match 'State\s*:\s*Not Present') -or ($dismMath -match 'The capability was not found') -or ($dismMath -notmatch 'State\s*:\s*Installed'))
+    Assert-Check -Name "MathRecognizer Capability Purged" -Pass $mathOk -Detail "Not Installed / Removed"
+
+    # 6. StepsRecorder Capability
+    $dismSteps = & dism.exe /English /Image:$MountDir /Get-CapabilityInfo /CapabilityName:App.StepsRecorder~~~~0.0.1.0 2>&1
+    $stepsOk = (($dismSteps -match 'State\s*:\s*Not Present') -or ($dismSteps -match 'The capability was not found') -or ($dismSteps -notmatch 'State\s*:\s*Installed'))
+    Assert-Check -Name "StepsRecorder Capability Purged" -Pass $stepsOk -Detail "Not Installed / Removed"
+
+    # 7. OpenSSH Capability
+    $dismSsh = & dism.exe /English /Image:$MountDir /Get-CapabilityInfo /CapabilityName:OpenSSH.Client~~~~0.0.1.0 2>&1
+    $sshOk = (($dismSsh -match 'State\s*:\s*Not Present') -or ($dismSsh -match 'The capability was not found') -or ($dismSsh -notmatch 'State\s*:\s*Installed'))
+    Assert-Check -Name "OpenSSH Capability Purged" -Pass $sshOk -Detail "Not Installed / Removed"
+
+    # 8. InboxApps
     Assert-Check -Name "InboxApps Purged" -Pass (-not (Test-Path "$MountDir\Windows\InboxApps")) -Detail "Directory does not exist"
 
     # 4-7. Defender Folders Deleted
