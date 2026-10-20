@@ -581,6 +581,27 @@ function Get-WindowsIso($name, $destinationDirectory) {
           }
         }
       }
+
+      # If WIM will remain (not being converted to ESD) or wimOnly mode, compact to purge orphaned streams
+      if (-not $esd -or $wimOnly) {
+        Write-CleanLine "Compacting serviced install.wim ($imageCount index(es)) to purge orphaned streams..."
+        $tempCompactWim = Join-Path $distDir "sources\install_compact.wim"
+        if (Test-Path $tempCompactWim) { Remove-Item $tempCompactWim -Force }
+        try {
+          for ($idx = 1; $idx -le $imageCount; $idx++) {
+            Write-CleanLine "Exporting index $idx of $imageCount to compacted WIM..."
+            & dism.exe /Export-Image /SourceImageFile:$installWim /SourceIndex:$idx /DestinationImageFile:$tempCompactWim /Compress:max /CheckIntegrity
+            if ($LASTEXITCODE -ne 0) { throw "dism /Export-Image compaction failed on index $idx with exit code $LASTEXITCODE" }
+          }
+          Remove-Item $installWim -Force
+          Move-Item $tempCompactWim $installWim -Force
+          Write-CleanLine "Compaction complete. New install.wim size: $((Get-Item $installWim).Length) bytes"
+        }
+        catch {
+          if (Test-Path $tempCompactWim) { Remove-Item $tempCompactWim -Force -ErrorAction SilentlyContinue }
+          throw
+        }
+      }
     }
 
     # If ESD was requested (and not wimOnly mode)
