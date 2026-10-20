@@ -352,7 +352,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
   if (!$preview) {
     if ($iso.title -match 'version') {
-      $parts = $iso.title -split 'version\s*'
+      $parts = @($iso.title -split 'version\s*')
       if ($parts.Count -lt 2) { throw "Unexpected title format, split resulted in less than 2 parts: $($parts -join '|')" }
       $verbuild = $parts[1] -split '[\s\(]' | Select-Object -First 1
     } else {
@@ -494,7 +494,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
       $installEsd = Join-Path $distDir "sources\install.esd"
       if (Test-Path $installEsd) {
         Write-CleanLine "Exporting install.esd to install.wim for servicing..."
-        $esdImages = Get-WindowsImage -ImagePath $installEsd
+        $esdImages = @(Get-WindowsImage -ImagePath $installEsd)
         for ($i = 1; $i -le $esdImages.Count; $i++) {
           & dism.exe /Export-Image /SourceImageFile:$installEsd /SourceIndex:$i /DestinationImageFile:$installWim
         }
@@ -505,7 +505,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     }
 
     if ($debloat) {
-      $wimImages = Get-WindowsImage -ImagePath $installWim
+      $wimImages = @(Get-WindowsImage -ImagePath $installWim)
       $imageCount = $wimImages.Count
       Write-CleanLine "Found $imageCount image index(es) in $installWim to service."
 
@@ -517,7 +517,8 @@ function Get-WindowsIso($name, $destinationDirectory) {
       $nsudo = Join-Path $PSScriptRoot "Utils\NSudo\x64\NSudoLC.exe"
 
       for ($idx = 1; $idx -le $imageCount; $idx++) {
-        $currentImageName = ($wimImages | Where-Object { $_.ImageIndex -eq $idx }).ImageName
+        $imgObj = $wimImages | Where-Object { $_.ImageIndex -eq $idx }
+        $currentImageName = if ($imgObj) { $imgObj.ImageName } else { "Index $idx" }
         Write-CleanLine "=== Servicing index $idx of ${imageCount}: $currentImageName ==="
 
         $mountDir = Join-Path $env:TEMP "Mount_Debloat_$([System.IO.Path]::GetRandomFileName())"
@@ -577,7 +578,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
     # If ESD was requested
     if ($esd) {
-      $wimImages = Get-WindowsImage -ImagePath $installWim
+      $wimImages = @(Get-WindowsImage -ImagePath $installWim)
       $imageCount = $wimImages.Count
       Write-CleanLine "Converting install.wim ($imageCount index(es)) to install.esd..."
       $installEsd = Join-Path $distDir "sources\install.esd"
@@ -605,13 +606,13 @@ function Get-WindowsIso($name, $destinationDirectory) {
       Write-CleanLine "Serviced image saved to $outWimPath"
 
       # Also preserve cdimage.exe if available so assembly jobs don't need to re-fetch
-      $cdimageExe = (Get-ChildItem -Path $buildDirectory -Filter "cdimage.exe" -Recurse | Select-Object -First 1).FullName
+      $cdimageExe = Get-ChildItem -Path $buildDirectory -Filter "cdimage.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
       if ($cdimageExe -and (Test-Path $cdimageExe)) {
         Copy-Item -Path $cdimageExe -Destination (Join-Path $destinationDirectory "cdimage.exe") -Force
       }
 
       # Write JSON metadata
-      $wimImages = Get-WindowsImage -ImagePath $outWimPath
+      $wimImages = @(Get-WindowsImage -ImagePath $outWimPath)
       $wimMetadata = [PSCustomObject]@{
         name       = $name
         edition    = $edInfo.Short
@@ -661,10 +662,11 @@ function Get-WindowsIso($name, $destinationDirectory) {
     # Build ISO with cdimage.exe
     $cdimageExe = Join-Path $buildDirectory "bin\cdimage.exe"
     if (-not (Test-Path $cdimageExe)) {
-      $cdimageExe = (Get-ChildItem -Path $buildDirectory -Filter "cdimage.exe" -Recurse | Select-Object -First 1).FullName
+      $cdimageExe = Get-ChildItem -Path $buildDirectory -Filter "cdimage.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
     }
     if (-not $cdimageExe) {
-      $cdimageExe = (Get-Command cdimage.exe -ErrorAction SilentlyContinue).Source
+      $cdCmd = Get-Command cdimage.exe -ErrorAction SilentlyContinue
+      if ($cdCmd) { $cdimageExe = $cdCmd.Source }
     }
     if (-not $cdimageExe) {
       throw "cdimage.exe could not be found to build the ISO."

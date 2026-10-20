@@ -32,9 +32,9 @@ if (-not (Test-Path $DestinationDirectory)) {
 }
 
 # 1. Discover all WIM / ESD files in WimDirectory
-$wimFiles = Get-ChildItem -Path $WimDirectory -Recurse -File | Where-Object {
+$wimFiles = @(Get-ChildItem -Path $WimDirectory -Recurse -File | Where-Object {
   $_.Extension -match '^\.(wim|esd)$' -and $_.Name -notmatch '^boot\.'
-}
+})
 
 if (-not $wimFiles -or $wimFiles.Count -eq 0) {
   throw "No .wim or .esd files found in '$WimDirectory'."
@@ -72,7 +72,7 @@ Write-CleanLine "Merging images into $mergedWim..."
 $totalMerged = 0
 foreach ($wf in $sortedWimFiles) {
   Write-CleanLine "Inspecting $($wf.FullName)..."
-  $images = Get-WindowsImage -ImagePath $wf.FullName
+  $images = @(Get-WindowsImage -ImagePath $wf.FullName)
   foreach ($img in $images) {
     $idx = $img.ImageIndex
     $name = $img.ImageName
@@ -134,12 +134,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 5. Locate cdimage.exe
-$cdimageExe = (Get-ChildItem -Path $WimDirectory -Filter "cdimage.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+$cdimageExe = Get-ChildItem -Path $WimDirectory -Filter "cdimage.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
 if (-not $cdimageExe) {
-  $cdimageExe = (Get-ChildItem -Path $PSScriptRoot -Filter "cdimage.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+  $cdimageExe = Get-ChildItem -Path $PSScriptRoot -Filter "cdimage.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
 }
 if (-not $cdimageExe) {
-  $cdimageExe = (Get-Command cdimage.exe -ErrorAction SilentlyContinue).Source
+  $cdCmd = Get-Command cdimage.exe -ErrorAction SilentlyContinue
+  if ($cdCmd) { $cdimageExe = $cdCmd.Source }
 }
 if (-not $cdimageExe) {
   # Look in Runner temp or choco
@@ -189,7 +190,7 @@ $isoChecksum = (Get-FileHash -Algorithm SHA256 $createdIsoPath).Hash.ToLowerInva
 Set-Content -Encoding ascii -NoNewline -Path "$createdIsoPath.sha256.txt" -Value $isoChecksum
 
 $finalMediaFile = if ($Esd) { Join-Path $stagingSources "install.esd" } else { Join-Path $stagingSources "install.wim" }
-$finalImages = Get-WindowsImage -ImagePath $finalMediaFile
+$finalImages = @(Get-WindowsImage -ImagePath $finalMediaFile)
 
 $isoMetadata = [PSCustomObject]@{
   name       = $WindowsTargetName
