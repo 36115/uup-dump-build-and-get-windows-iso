@@ -832,7 +832,7 @@ jobs:
           Add-MpPreference -ExclusionPath $env:TEMP, "C:\output", "D:\output", "C:\a", "D:\a" -ErrorAction SilentlyContinue
 
       - name: Download all WIM artifacts
-        uses: actions/download-artifact@v7.0.1
+        uses: actions/download-artifact@v8
         with:
           pattern: wim-*
           path: aio_wims
