@@ -78,7 +78,11 @@ foreach ($wf in $sortedWimFiles) {
     $name = $img.ImageName
     $totalMerged++
     Write-CleanLine "Exporting index $idx ($name) from $($wf.Name) into AIO WIM (Target Index: $totalMerged)..."
-    & dism.exe /Export-Image /SourceImageFile:$($wf.FullName) /SourceIndex:$idx /DestinationImageFile:$mergedWim
+    if (-not (Test-Path $mergedWim)) {
+      & dism.exe /Export-Image /SourceImageFile:$($wf.FullName) /SourceIndex:$idx /DestinationImageFile:$mergedWim /Compress:max
+    } else {
+      & dism.exe /Export-Image /SourceImageFile:$($wf.FullName) /SourceIndex:$idx /DestinationImageFile:$mergedWim
+    }
     if ($LASTEXITCODE -ne 0) {
       throw "dism /Export-Image failed on $($wf.FullName) index $idx with exit code $LASTEXITCODE"
     }
@@ -192,11 +196,16 @@ Set-Content -Encoding ascii -NoNewline -Path "$createdIsoPath.sha256.txt" -Value
 $finalMediaFile = if ($Esd) { Join-Path $stagingSources "install.esd" } else { Join-Path $stagingSources "install.wim" }
 $finalImages = @(Get-WindowsImage -ImagePath $finalMediaFile)
 
+$aioTag = ""
+if ($Esd) { $aioTag += ".E" }
+$aioTag += ".Debloat"
+
 $isoMetadata = [PSCustomObject]@{
   name       = $WindowsTargetName
   edition    = "AIO"
   build      = $buildNumber
   version    = $verbuild
+  tags       = $aioTag
   checksum   = $isoChecksum
   images     = @($finalImages | ForEach-Object {
     $imgVer = $verbuild

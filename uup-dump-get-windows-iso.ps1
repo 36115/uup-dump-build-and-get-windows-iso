@@ -408,7 +408,9 @@ function Get-WindowsIso($name, $destinationDirectory) {
   if ($wimOnly) {
     $convertConfig = $convertConfig `
       -replace '^(SkipISO\s*)=.*', '$1=1' `
-      -replace '^(vSkipISO\s*)=.*', '$1=1'
+      -replace '^(vSkipISO\s*)=.*', '$1=1' `
+      -replace '^(wim2esd\s*)=.*', '$1=0' `
+      -replace '^(vwim2esd\s*)=.*', '$1=0'
   }
   if ($debloat) {
     $convertConfig = $convertConfig `
@@ -581,8 +583,8 @@ function Get-WindowsIso($name, $destinationDirectory) {
       }
     }
 
-    # If ESD was requested
-    if ($esd) {
+    # If ESD was requested (and not wimOnly mode)
+    if ($esd -and -not $wimOnly) {
       $wimImages = @(Get-WindowsImage -ImagePath $installWim)
       $imageCount = $wimImages.Count
       Write-CleanLine "Converting install.wim ($imageCount index(es)) to install.esd..."
@@ -597,9 +599,9 @@ function Get-WindowsIso($name, $destinationDirectory) {
     }
 
     if ($wimOnly) {
-      Write-CleanLine "wimOnly mode active. Staging serviced WIM/ESD artifact..."
-      $finalArtifact = if ($esd) { Join-Path $distDir "sources\install.esd" } else { Join-Path $distDir "sources\install.wim" }
-      $targetExt = if ($esd) { ".esd" } else { ".wim" }
+      Write-CleanLine "wimOnly mode active. Staging serviced WIM artifact..."
+      $finalArtifact = Join-Path $distDir "sources\install.wim"
+      $targetExt = ".wim"
       $outWimName = "$name-$($edInfo.Short)$targetExt"
       $outWimPath = Join-Path $destinationDirectory $outWimName
 
@@ -623,6 +625,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
         edition    = $edInfo.Short
         build      = $iso.build
         version    = $verbuild
+        tags       = $tag
         wimFile    = $outWimName
         images     = @($wimImages | ForEach-Object {
           $imgVer = $verbuild
