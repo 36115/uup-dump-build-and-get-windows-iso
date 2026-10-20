@@ -807,7 +807,11 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: wim-${{ matrix.edition }}
-          path: ${{ inputs.architecture == 'arm64' && 'c:/output/*' || 'd:/output/*' }}
+          path: |
+            ${{ inputs.architecture == 'arm64' && 'c:/output/*.wim' || 'd:/output/*.wim' }}
+            ${{ inputs.architecture == 'arm64' && 'c:/output/*.esd' || 'd:/output/*.esd' }}
+            ${{ inputs.architecture == 'arm64' && 'c:/output/*.json' || 'd:/output/*.json' }}
+            ${{ inputs.architecture == 'arm64' && 'c:/output/cdimage.exe' || 'd:/output/cdimage.exe' }}
           if-no-files-found: error
 
   assemble_aio:

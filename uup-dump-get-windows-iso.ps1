@@ -645,6 +645,13 @@ function Get-WindowsIso($name, $destinationDirectory) {
         Write-Output "EDITION_NAME=$($edInfo.Short)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         Write-Output "ISO_NAME=$name-$($edInfo.Short)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       }
+
+      # Clean up build scratch directory so runner disk is freed and artifacts aren't bloated
+      if (Test-Path $buildDirectory) {
+        Write-CleanLine "Cleaning build scratch directory: $buildDirectory..."
+        Remove-Item -Path $buildDirectory -Recurse -Force -ErrorAction SilentlyContinue
+      }
+
       Write-CleanLine "wimOnly completed successfully for $($edInfo.Short)."
       return
     }
