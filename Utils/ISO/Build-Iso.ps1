@@ -514,6 +514,13 @@ function Patch-BootWim {
             if (Test-Path $profHelper) { . $profHelper }
         }
 
+        # Load WinPE utility helpers
+        if (-not (Get-Command Enable-Win11HardwareBypass -ErrorAction SilentlyContinue)) {
+            $winpeHelper = Join-Path $PSScriptRoot "..\WinPE\WinPE.ps1"
+            if (-not (Test-Path $winpeHelper)) { $winpeHelper = Join-Path $repoRoot "Utils\WinPE\WinPE.ps1" }
+            if (Test-Path $winpeHelper) { . $winpeHelper }
+        }
+
         $profileDir = if ($ProfileName -and (Get-Command Resolve-ProfileDir -ErrorAction SilentlyContinue)) {
             Resolve-ProfileDir -ProfileName $ProfileName -OsFamily $OsFamily -RepoRoot $repoRoot
         } else { "" }
