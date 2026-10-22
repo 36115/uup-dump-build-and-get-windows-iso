@@ -23,5 +23,7 @@
     }
 
     # Modular servicing scripts to execute
-    Scripts = @()
+    Scripts = @(
+        if ($targetOS -eq '11') { 'Scripts/Bypass-HardwareRequirements.ps1' }
+    ) | Where-Object { $_ }
 }
