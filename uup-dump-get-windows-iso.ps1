@@ -34,176 +34,14 @@ $loggingHelper = Join-Path $PSScriptRoot "Utils\Common\Write-Log.ps1"
 if (Test-Path $loggingHelper) { . $loggingHelper }
 
 # ------------------------------
-# Basic metadata helpers
+# Load Helpers
 # ------------------------------
-$arch = if ($architecture -eq "x64") { "amd64" } else { "arm64" }
-
-if ($windowsTargetName -match 'beta|dev|wif|canary') {
-        $preview = $true
-        $ringLower = @('beta','dev','wif','canary').Where({$windowsTargetName -match $_})[0]
+$uupDumpHelper = Join-Path $PSScriptRoot "Utils\UUPDump\Get-UupDumpIso.ps1"
+if (-not (Test-Path $uupDumpHelper)) {
+        $uupDumpHelper = Join-Path (Split-Path $PSScriptRoot -Parent) "Utils\UUPDump\Get-UupDumpIso.ps1"
 }
 
-function Get-EditionName($e) {
-        switch ($e.ToLower()) {
-    "core"  { "Core" }
-    "home"  { "Core" }
-    "multi" { "Multi" }
-    default { "Professional" }
-        }
-}
-
-$dotSystemRevision = if ([string]::IsNullOrWhiteSpace($revision)) { '' } else { ".$revision" }
-$systemRevision = if ([string]::IsNullOrWhiteSpace($revision)) { '' } else { " $revision" }
-
-$TARGETS = @{
-        "windows-10"           = @{ search="windows 10 19045$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-11old"        = @{ search="windows 11 22631$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-11"           = @{ search="windows 11 26100$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-11new"        = @{ search="windows 11 26200$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-11beta"       = @{ search="windows 11 26120$dotSystemRevision $arch"; edition=(Get-EditionName $edition); ring="Beta" }
-        "windows-11dev"        = @{ search="windows 11 26220$dotSystemRevision $arch"; edition=(Get-EditionName $edition); ring="Wif" }
-        "windows-1126h1"       = @{ search="windows 11 28000$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-1126h2"       = @{ search="windows 11 26300$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-1126h2beta"   = @{ search="windows 11 26340$dotSystemRevision $arch"; edition=(Get-EditionName $edition) }
-        "windows-dev"          = @{ search="windows 11 26300$dotSystemRevision $arch"; edition=(Get-EditionName $edition); ring="Dev" }
-        "windows-canary"       = @{ search="windows 11$systemRevision $arch"; edition=(Get-EditionName $edition); ring="Canary" }
-}
-
-function New-QueryString([hashtable]$parameters) {
-        @($parameters.GetEnumerator() | ForEach-Object { "$($_.Key)=$([System.Net.WebUtility]::UrlEncode([string]$_.Value))" }) -join '&'
-}
-
-function Invoke-UupDumpApi([string]$name, [hashtable]$body) {
-        for ($n = 0; $n -lt 15; ++$n) {
-    if ($n) {
-                        Write-CleanLine "Waiting a bit before retrying the uup-dump api ${name} request #$n"
-                        Start-Sleep -Seconds 10
-                        Write-CleanLine "Retrying the uup-dump api ${name} request #$n"
-    }
-    try {
-                        $qs = if ($body) { '?' + (New-QueryString $body) } else { '' }
-                        return Invoke-RestMethod -Method Get -Uri ("https://api.uupdump.net/{0}.php{1}" -f $name, $qs)
-    } catch {
-                        Write-CleanLine "WARN: failed the uup-dump api $name request: $_"
-    }
-        }
-        throw "timeout making the uup-dump api $name request"
-}
-
-function Get-UupDumpIso($name, $target) {
-        Write-CleanLine "Getting the $name metadata"
-        $result = Invoke-UupDumpApi listid @{ search = $target.search }
-
-        $result.response.builds.PSObject.Properties
-        | ForEach-Object {
-                        $id = $_.Value.uuid
-                        $uupDumpUrl = 'https://uupdump.net/selectlang.php?' + (New-QueryString @{ id = $id })
-                        Write-CleanLine "Processing $name $id ($uupDumpUrl)"
-                        $_
-    }
-        | Where-Object {
-                        if ($_.Value.title -match '\.NET Framework') {
-            Write-CleanLine "Skipping, ignore .NET Framework update."
-            return $false
-        }
-                        if ($_.Value.title -match 'Windows CPC OS') {
-            Write-CleanLine "Skipping, ignore Windows CPC OS."
-            return $false
-        }
-                        if (!$preview) {
-        $ok = ($target.search -like '*preview*') -or ($_.Value.title -notlike '*preview*')
-        if (-not $ok) {
-                                        Write-CleanLine "Skipping.
-                    L1: Expected preview=false.
-                    L2: Got preview=true."
-        }
-        return $ok
-                        }
-                        $true
-    }
-        | ForEach-Object {
-                        $id = $_.Value.uuid
-                        Write-CleanLine "Getting the $name $id langs metadata"
-                        $result = Invoke-UupDumpApi listlangs @{ id = $id }
-                        if ($result.response.updateInfo.build -ne $_.Value.build) {
-        throw 'for some reason listlangs returned an unexpected build'
-                        }
-                        $_.Value | Add-Member -NotePropertyMembers @{ langs = $result.response.langFancyNames; info = $result.response.updateInfo }
-
-                        $langs = $_.Value.langs.PSObject.Properties.Name
-                        $eds = if ($langs -contains $lang) {
-        Write-CleanLine "Getting the $name $id editions metadata"
-        $result = Invoke-UupDumpApi listeditions @{ id = $id; lang = $lang }
-        $result.response.editionFancyNames
-                        } else {
-        Write-CleanLine "Skipping.
-        L3: Expected langs=$lang.
-        L4: Got langs=$($langs -join ',')."
-        [PSCustomObject]@{}
-                        }
-                        $_.Value | Add-Member -NotePropertyMembers @{ editions = $eds }
-                        $_
-    }
-        | Where-Object {
-                        $langs = $_.Value.langs.PSObject.Properties.Name
-                        $editions = $_.Value.editions.PSObject.Properties.Name
-                        $res = $true
-
-                        if ($ringLower) {
-        $actual = ($_.Value.info.ring).ToUpper()
-        $allowedRings = switch ($ringLower) {
-                                        'canary' { 'CANARY', 'WIF' }
-                                        'dev'    { 'DEV', 'WIF', 'WIS' }
-                                        'beta'   { 'BETA', 'WIF', 'WIS' }
-                                        default { $ringLower.ToUpper() }
-        }
-
-        if ($actual -notin $allowedRings) {
-                                        Write-CleanLine "Skipping. Expected ring: $($allowedRings -join ', '). Got ring=$actual."
-                                        $res = $false
-        }
-                        }
-
-                        if ($langs -notcontains $lang) {
-        Write-CleanLine "Skipping. Expected langs=$lang. Got langs=$($langs -join ',')."
-        $res = $false
-                        }
-
-                        if ((Get-EditionName $edition) -eq "Multi") {
-        if (($editions -notcontains "Professional") -and ($editions -notcontains "Core")) {
-                                        Write-CleanLine "Skipping.
-                    L6: Expected editions=Multi (Professional/Core). Got editions=$($editions -join ',')."
-                                        $res = $false
-        }
-                        } elseif ($editions -notcontains (Get-EditionName $edition)) {
-        Write-CleanLine ("Skipping. Expected editions={0}.
-        L7: Got editions={1}." -f (Get-EditionName $edition), ($editions -join ','))
-        $res = $false
-                        }
-
-                        if (!$preview -and -not ($_.Value.title -match 'version')) {
-        Write-CleanLine "Skipping. Unexpected title format: missing 'version'."
-        $res = $false
-                        }
-
-                        $res
-    }
-        | Select-Object -First 1
-        | ForEach-Object {
-                        $id = $_.Value.uuid
-                        [PSCustomObject]@{
-        name               = $name
-        title              = $_.Value.title
-        build              = $_.Value.build
-        id                 = $id
-        edition            = $target.edition
-        virtualEdition     = $target['virtualEdition']
-        apiUrl             = 'https://api.uupdump.net/get.php?' + (New-QueryString @{ id = $id; lang = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
-        downloadUrl        = 'https://uupdump.net/download.php?' + (New-QueryString @{ id = $id; pack = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
-        downloadPackageUrl = 'https://uupdump.net/get.php?' + (New-QueryString @{ id = $id; pack = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
-                        }
-    }
-}
+if (Test-Path $uupDumpHelper) { . $uupDumpHelper }
 
 function Get-IsoWindowsImages($isoPath) {
         $isoPath = Resolve-Path $isoPath
@@ -224,65 +62,20 @@ function Get-IsoWindowsImages($isoPath) {
         }
 }
 
-# ------------------------------
-# Patch uup_download_windows.cmd with sed - quiet aria2 flags
-# ------------------------------
-function Patch-Aria2-Flags {
-        param([string]$CmdPath)
-        if (-not (Test-Path $CmdPath)) { return }
-
-        $sed = Get-Command sed -ErrorAction SilentlyContinue
-        if ($sed) {
-    Write-CleanLine "Patching aria2 flags in $CmdPath using sed."
-    # Remove conflicting flags first
-    & $sed.Path -ri 's/\s--console-log-level=\w+\b//g; s/\s--summary-interval=\d+\b//g; s/\s--download-result=\w+\b//g; s/\s--enable-color=\w+\b//g; s/\s-(q|quiet(=\w+)?)\b//g' $CmdPath
-    # Inject quiet set right after "%aria2%"
-    & $sed.Path -ri 's@("%aria2%"\s+)@\1--quiet=true --console-log-level=error --summary-interval=0 --download-result=hide --enable-color=false @g' $CmdPath
-    return
-        }
-
-        # Fallback: PowerShell regex (preserves UTF-16LE)
-        Write-CleanLine "sed not found. Patching aria2 flags in $CmdPath using PowerShell fallback."
-        $bytes   = [System.IO.File]::ReadAllBytes($CmdPath)
-        $content = [System.Text.Encoding]::Unicode.GetString($bytes)
-
-        $patternsToRemove = @(
-    '\s--console-log-level=\w+\b',
-    '\s--summary-interval=\d+\b',
-    '\s--download-result=\w+\b',
-    '\s--enable-color=\w+\b',
-    '\s-(?:q|quiet(?:=\w+)?)\b'
-        )
-        foreach ($re in $patternsToRemove) {
-    $content = [regex]::Replace($content, $re, '', 'IgnoreCase, CultureInvariant')
-        }
-        $inject = '--quiet=true --console-log-level=error --summary-interval=0 --download-result=hide --enable-color=false '
-        $content = [regex]::Replace($content, '("%aria2%"\s+)', ('$1' + $inject), 'IgnoreCase, CultureInvariant')
-
-        $newBytes = [System.Text.Encoding]::Unicode.GetBytes($content)
-        [System.IO.File]::WriteAllBytes($CmdPath, $newBytes)
-}
-
 function Get-WindowsIso($name, $destinationDirectory) {
-        $iso = Get-UupDumpIso $name $TARGETS.$name
-        if (-not $iso) { throw "Can't find UUP for $name ($($TARGETS.$name.search)), lang=$lang." }
+    $arch = Get-UupArchitecture -Architecture $architecture
+        $preview = $false
+        $ringLower = Get-UupTargetRing -TargetName $name
+        if ($ringLower) { $preview = $true }
+        $targetDef = Get-UupTargetDefinition -TargetName $name -Architecture $arch -Revision $revision -Edition $edition
+        $iso = Get-UupDumpIso $name $targetDef
+        if (-not $iso) { throw "Can't find UUP for $name ($($targetDef.search)), lang=$lang." }
 
         $isoHasEdition    = $iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition
         $hasVirtualMember = $iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition
-        $effectiveEdition = if ($isoHasEdition) { $iso.edition } else { $TARGETS.$name.edition }
+        $effectiveEdition = if ($isoHasEdition) { $iso.edition } else { $targetDef.edition }
 
-        if (!$preview) {
-    if ($iso.title -match 'version') {
-                        $parts = $iso.title -split 'version\s*'
-                        if ($parts.Count -lt 2) { throw "Unexpected title format, split resulted in less than 2 parts: $($parts -join '|')" }
-                        $verbuild = $parts[1] -split '[\s\(]' | Select-Object -First 1
-    } else {
-                        Write-CleanLine "WARN: Unexpected title format: missing 'version'. Using build number fallback."
-                        $verbuild = $iso.build
-    }
-        } else {
-    $verbuild = $ringLower.ToUpper()
-        }
+        $verbuild = Get-UupVersionBuild -Title $iso.title -Build $iso.build -IsPreview $preview -Ring $ringLower
 
         $buildDirectory               = "$destinationDirectory/$name"
         $destinationIsoPath           = "$buildDirectory.iso"
@@ -346,7 +139,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
             # DISM progress buckets; aria2 is not parsed here
             if (-not (Process-ProgressLine $line)) {
                                                         if ($line -match '^\s*(Mounting image|Saving image|Applying image|Exporting image|Unmounting image|Deployment Image Servicing and Management tool|^=== )') {
-        Reset-ProgressSession
+                Reset-ProgressSession
                                                         }
                                                         Write-CleanLine $line
             }
