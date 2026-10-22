@@ -53,3 +53,20 @@ Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Control\Power\User\Default\PowerSche
 Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\$ultGuid" "Attributes" 0 "REG_DWORD" -Elevated
 Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Control\Power\User\Default\PowerSchemes\$ultGuid" "Attributes" 0 "REG_DWORD" -Elevated
 Write-Success "Activated and unhid Ultimate Performance power scheme in offline registry."
+
+Write-Step "Configuring Offline OOBE Skips and Local Account Prompt..."
+# Bypass Windows 11 Network / Microsoft Account (MSA) requirement
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "BypassNRO" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "HideOnlineAccountScreens" 1 "REG_DWORD"
+
+# Skip Express Settings, Privacy toggles (<ProtectYourPC>3), and Mute Voice
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "ProtectYourPC" 3 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "PrivacyConsentStatus" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "DisableVoice" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "NetworkLocation" "Home" "REG_SZ"
+
+# Skip EULA and Wireless Setup prompts
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "SetupDisplayedEula" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "HideWirelessSetupInOOBE" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\OOBE" "DisablePrivacyExperience" 1 "REG_DWORD"
+Write-Success "Configured offline OOBE bypass registry keys (custom username enabled at first boot)."
