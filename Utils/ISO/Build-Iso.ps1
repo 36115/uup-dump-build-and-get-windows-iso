@@ -228,6 +228,30 @@ function Export-IsoMetadata {
 }
 
 
+function Resolve-DistributionDirectory {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$BuildDirectory
+  )
+
+  $distDir = Get-ChildItem -Path $BuildDirectory -Directory -ErrorAction SilentlyContinue | Where-Object {
+    (Test-Path (Join-Path $_.FullName "sources\install.wim")) -or (Test-Path (Join-Path $_.FullName "sources\install.esd"))
+  } | Select-Object -First 1 -ExpandProperty FullName
+
+  if (-not $distDir) {
+    if (Test-Path (Join-Path $BuildDirectory "ISOFOLDER\sources\install.wim")) {
+      $distDir = Join-Path $BuildDirectory "ISOFOLDER"
+    } elseif (Test-Path (Join-Path $BuildDirectory "ISOFOLDER\sources\install.esd")) {
+      $distDir = Join-Path $BuildDirectory "ISOFOLDER"
+    } else {
+      throw "Could not locate distribution folder with sources\install.wim in $BuildDirectory"
+    }
+  }
+
+  return $distDir
+}
+
 function Resolve-TargetDirectory {
     [CmdletBinding()]
     param(
