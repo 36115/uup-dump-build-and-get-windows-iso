@@ -194,7 +194,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
-          lfs: true
           persist-credentials: false
 
       - name: Map inputs
@@ -574,7 +573,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v8
         with:
-          lfs: true
           persist-credentials: false
 
       - name: Setup Environment
@@ -606,7 +604,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
-          lfs: true
           persist-credentials: false
 
       - name: Download all WIM artifacts
