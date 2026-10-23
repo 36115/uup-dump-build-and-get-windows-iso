@@ -10,8 +10,10 @@ param(
                 [switch]$esd,
                 [switch]$drivers,
                 [switch]$netfx3,
-                [switch]$debloat,
-                [string]$revision
+                [switch]$wimOnly,
+                [string]$sourceIso,
+                [string]$revision,
+                [string]$profileName
 )
 
 Set-StrictMode -Version Latest
@@ -79,6 +81,24 @@ function Get-WindowsIso($name, $destinationDirectory) {
                 $virtualEd = if ($hasVirtualMember) { $virtualEdn } else { "" }
                 Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
 
+                $osFamily = if ($name -match '(?i)win(dows)?[-_\s]?10') { 'Win10' } else { 'Win11' }
+                $resolvedProfile = if ($profileName) { $profileName } else { "$osFamily/Default" }
+                $resolvedProfileDir = if (Get-Command Resolve-ProfileDir -ErrorAction SilentlyContinue) {
+                                Resolve-ProfileDir -ProfileName $resolvedProfile -OsFamily $osFamily -RepoRoot $PSScriptRoot
+                } else {
+                                Join-Path $PSScriptRoot "Config\$resolvedProfile"
+                }
+                $profileChain = if ($resolvedProfileDir -and (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
+                                Get-ProfileHierarchy -ProfileDir $resolvedProfileDir -RepoRoot $PSScriptRoot
+                } else {
+                                @()
+                }
+                $convertConfigOverrides = if (Get-Command Get-ProfileConvertConfig -ErrorAction SilentlyContinue) {
+                                Get-ProfileConvertConfig -ProfileChain $profileChain
+                } else {
+                                @{}
+                }
+
                 $iniFile = Join-Path $buildDirectory 'ConvertConfig.ini'
                 $tag = Set-UupConvertConfig -ConfigFile $iniFile `
                                 -Esd:$esd `
@@ -88,22 +108,102 @@ function Get-WindowsIso($name, $destinationDirectory) {
                                 -DriversDestDir (Join-Path $buildDirectory 'Drivers') `
                                 -NetFx3:$netfx3 `
                                 -VirtualEdition $virtualEd `
-                                -Debloat:$debloat
+                                -WimOnly:$wimOnly `
+                                -ConvertConfigOverrides $convertConfigOverrides
+
+                # Append profile IsoTag (e.g. .Debloat) if configured in profile hierarchy
+                $profileIsoTag = if ($profileChain -and (Get-Command Get-ProfileIsoTag -ErrorAction SilentlyContinue)) { Get-ProfileIsoTag -ProfileChain $profileChain } else { "" }
+                if ($profileIsoTag) { $tag += $profileIsoTag }
 
                 Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
                 Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
 
+                $needsServicing = [bool]$profileName -and ($resolvedProfile -notmatch '(?i)default$')
+                if ($needsServicing -or $wimOnly) {
+                                Write-CleanLine "Locating distribution folder..."
+                                $distDir = Get-ChildItem -Path $buildDirectory -Directory | Where-Object {
+                                                (Test-Path (Join-Path $_.FullName "sources\install.wim")) -or (Test-Path (Join-Path $_.FullName "sources\install.esd"))
+                                } | Select-Object -First 1 -ExpandProperty FullName
 
-                if ($profileName -and ($profileName -notmatch '(?i)default$')) {
-                                $ednShort = switch -Exact ($edition.ToLower()) {
-                                                "homesinglelanguage" { "HomeSL" }
-                                                "home"               { "Home" }
-                                                "pro"                { "Pro" }
-                                                "multi"              { "Multi" }
-                                                default              { $edition }
+                                if (-not $distDir) {
+                                                if (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.wim")) {
+                                                                $distDir = Join-Path $buildDirectory "ISOFOLDER"
+                                                } elseif (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.esd")) {
+                                                                $distDir = Join-Path $buildDirectory "ISOFOLDER"
+                                                } else {
+                                                                throw "Could not locate distribution folder with sources\install.wim in $buildDirectory"
+                                                }
                                 }
-                                $finalIsoName = Get-IsoName -TargetName $name -EditionShort $ednShort -VersionBuild $verbuild -BuildNumber $iso.build
-                                Invoke-ImageServicing -buildDirectory $buildDirectory -finalIsoName $finalIsoName -architecture $architecture -esd:$esd
+                                Write-CleanLine "Distribution folder located: $distDir"
+
+                                $wimlibHelper = Join-Path $PSScriptRoot "Utils\WimLib\WimLib.ps1"
+                                if (Test-Path $wimlibHelper) { . $wimlibHelper }
+                                $wimlib = if (Get-Command Get-WimLibPath -ErrorAction SilentlyContinue) { Get-WimLibPath } else { $null }
+                                if ($wimlib) {
+                                                Write-CleanLine "wimlib-imagex detected: $wimlib"
+                                }
+
+                                $installWim = Join-Path $distDir "sources\install.wim"
+                                if (-not (Test-Path $installWim)) {
+                                                $installEsd = Join-Path $distDir "sources\install.esd"
+                                                if (Test-Path $installEsd) {
+                                                                Write-CleanLine "Exporting install.esd to install.wim for servicing..."
+                                                                ConvertTo-WindowsWim -SourcePath $installEsd -DestinationPath $installWim -WimLibPath $wimlib
+                                                                Remove-Item $installEsd -Force
+                                                } else {
+                                                                throw "Neither install.wim nor install.esd found in $distDir\sources"
+                                                }
+                                }
+
+                                if ($needsServicing) {
+                                                Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esd -wimOnly:$wimOnly -wimlib $wimlib -profileName $resolvedProfile
+                                }
+
+                                # If ESD was requested (and not wimOnly mode)
+                                if ($esd -and -not $wimOnly) {
+                                                $wimImages = @(Get-WindowsImage -ImagePath $installWim)
+                                                $imageCount = $wimImages.Count
+                                                Write-CleanLine "Converting install.wim ($imageCount index(es)) to install.esd..."
+                                                $installEsd = Join-Path $distDir "sources\install.esd"
+                                                if (Test-Path $installEsd) { Remove-Item $installEsd -Force }
+                                                ConvertTo-WindowsEsd -SourcePath $installWim -DestinationPath $installEsd -ImageCount $imageCount -WimLibPath $wimlib
+                                                Remove-Item $installWim -Force
+                                }
+
+                                # Clean SourceIso media and service boot.wim using Build-BaseISO.ps1 on uupdump's distribution folder
+                                $baseInput = if ($sourceIso -and (Test-Path $sourceIso)) { $sourceIso } else { $distDir }
+                                Write-CleanLine "Running Build-BaseISO.ps1 on $baseInput..."
+                                $baseScript = Join-Path $PSScriptRoot "Config\All\Debloat\OS\Scripts\ISO\Build-BaseISO.ps1"
+                                if (-not (Test-Path $baseScript)) { $baseScript = Join-Path $PSScriptRoot "Config\ISO\Build-BaseISO.ps1" }
+                                $cleanSourceIsoDir = Join-Path $buildDirectory "CleanSourceIso"
+                                & powershell -ExecutionPolicy Bypass -File $baseScript -SourceIsoPath $baseInput -OutputDirectory $cleanSourceIsoDir
+                                if ($LASTEXITCODE -ne 0) { throw "Build-BaseISO.ps1 failed with exit code $LASTEXITCODE" }
+
+                                # Copy serviced install image into the clean SourceIso media
+                                $servicedInstallWim = Join-Path $distDir "sources\install.wim"
+                                $servicedInstallEsd = Join-Path $distDir "sources\install.esd"
+                                if (Test-Path $servicedInstallEsd) {
+                                                Copy-Item -Path $servicedInstallEsd -Destination (Join-Path $cleanSourceIsoDir "sources\install.esd") -Force
+                                } elseif (Test-Path $servicedInstallWim) {
+                                                Copy-Item -Path $servicedInstallWim -Destination (Join-Path $cleanSourceIsoDir "sources\install.wim") -Force
+                                }
+                                $finalMediaDir = $cleanSourceIsoDir
+
+                                if ($wimOnly) {
+                                                Export-WimOnlyArtifact -distDir $distDir -cleanSourceIsoDir $cleanSourceIsoDir -targetDirectory $targetDirectory -buildDirectory $buildDirectory `
+                                                                -name $name -editionShort $edInfo.Short -build $iso.build -verbuild $verbuild -tag $tag
+                                                return
+                                }
+
+                                # Build ISO with cdimage.exe
+                                $finalIsoName = if ($needsServicing) {
+                                                Get-IsoName -TargetName $name -EditionShort $edInfo.Short -VersionBuild $verbuild -BuildNumber $iso.build
+                                } else {
+                                                $title
+                                }
+
+                                $createdIsoPath = "$buildDirectory\$finalIsoName.iso"
+                                New-IsoImage -SourceDir $finalMediaDir -DestinationIsoPath $createdIsoPath -VolumeLabel $finalIsoName -Architecture $architecture -SearchDir $buildDirectory
                 }
 
                                 Export-IsoArtifact -BuildDirectory $buildDirectory `
