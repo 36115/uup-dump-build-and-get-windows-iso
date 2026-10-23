@@ -181,3 +181,28 @@ function Get-IsoWindowsImages {
     Dismount-DiskImage $IsoPath | Out-Null
   }
 }
+
+
+function Resolve-TargetDirectory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationDirectory,
+        [Parameter(Mandatory = $true)]
+        [string]$Architecture,
+        [Parameter(Mandatory = $false)]
+        [string]$Build = "",
+        [Parameter(Mandatory = $false)]
+        [string]$FallbackVersion = ""
+    )
+    $archTag = switch -Regex ($Architecture) {
+        'arm64' { 'arm64' }
+        default { 'x86_64' }
+    }
+    $buildTag = if ($Build) { $Build } else { $FallbackVersion }
+    $targetDir = Join-Path $DestinationDirectory "Target\$archTag\$buildTag"
+    if (-not (Test-Path $targetDir)) {
+        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+    }
+    return $targetDir
+}

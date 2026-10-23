@@ -2,7 +2,7 @@
 
 param(
   [string]$windowsTargetName,
-  [string]$destinationDirectory = 'output',
+  [string]$destinationDirectory = 'Out',
   [ValidateSet("x64", "arm64")] [string]$architecture = "x64",
   [ValidateSet("pro", "core", "multi", "home")] [string]$edition = "pro",
   [ValidateSet("nb-no", "fr-ca", "fi-fi", "lv-lv", "es-es", "en-gb", "zh-tw", "th-th", "sv-se", "en-us", "es-mx", "bg-bg", "hr-hr", "pt-br", "el-gr", "cs-cz", "it-it", "sk-sk", "pl-pl", "sl-si", "neutral", "ja-jp", "et-ee", "ro-ro", "fr-fr", "pt-pt", "ar-sa", "lt-lt", "hu-hu", "da-dk", "zh-cn", "uk-ua", "tr-tr", "ru-ru", "nl-nl", "he-il", "ko-kr", "sr-latn-rs", "de-de")]
@@ -58,10 +58,9 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
   $verbuild = Get-UupVersionBuild -Title $iso.title -Build $iso.build -IsPreview $preview -Ring $ringLower
 
-  $buildDirectory               = "$destinationDirectory/$name"
-  $destinationIsoPath           = "$buildDirectory.iso"
-  $destinationIsoMetadataPath   = "$destinationIsoPath.json"
-  $destinationIsoChecksumPath   = "$destinationIsoPath.sha256.txt"
+  $targetDirectory = Resolve-TargetDirectory -DestinationDirectory $destinationDirectory -Architecture $architecture -Build $iso.build -FallbackVersion $verbuild
+
+  $buildDirectory = Join-Path $destinationDirectory "build\$name"
 
   if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
   New-Item -ItemType Directory -Force $buildDirectory | Out-Null
@@ -90,6 +89,10 @@ function Get-WindowsIso($name, $destinationDirectory) {
   $sourceIsoPath = Resolve-Path $buildDirectory/*.iso
   $IsoName = Split-Path $sourceIsoPath -leaf
 
+  $finalIsoPath = Join-Path $targetDirectory $IsoName
+  $destinationIsoChecksumPath = "$finalIsoPath.sha256.txt"
+  $destinationIsoMetadataPath = "$finalIsoPath.json"
+
   Write-CleanLine "Getting the $sourceIsoPath checksum"
   $isoChecksum = (Get-FileHash -Algorithm SHA256 $sourceIsoPath).Hash.ToLowerInvariant()
   Set-Content -Encoding ascii -NoNewline -Path $destinationIsoChecksumPath -Value $isoChecksum
@@ -113,8 +116,9 @@ function Get-WindowsIso($name, $destinationDirectory) {
     } | ConvertTo-Json -Depth 99) -replace '\\u0026','&'
   )
 
-  Write-CleanLine "Moving the created $sourceIsoPath to $destinationDirectory/$IsoName"
-  Move-Item -Force $sourceIsoPath "$destinationDirectory/$IsoName"
+  Write-CleanLine "Moving the created $sourceIsoPath to $finalIsoPath"
+  Move-Item -Force $sourceIsoPath $finalIsoPath
+  Remove-Item -Force -Recurse $buildDirectory -ErrorAction SilentlyContinue | Out-Null
 
   Write-Output "ISO_NAME=$IsoName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
   Write-CleanLine 'All Done.'
