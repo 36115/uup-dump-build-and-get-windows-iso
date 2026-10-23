@@ -349,7 +349,21 @@ function Invoke-UupDownloadProcess {
             $RawLogPath = Join-Path $tempDir "uup_dism_aria2_raw.log"
         }
 
-        choco install aria2 /y *> $null
+        $ariaHelper = Join-Path $PSScriptRoot "..\aria2\Get-Aria2Path.ps1"
+        if (-not (Test-Path $ariaHelper)) {
+            $ariaHelper = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "Utils\aria2\Get-Aria2Path.ps1"
+        }
+        if (Test-Path $ariaHelper) { . $ariaHelper }
+        $ariaPath = if (Get-Command Get-Aria2Path -ErrorAction SilentlyContinue) {
+            Get-Aria2Path -SearchDir $BuildDirectory
+        } else {
+            $null
+        }
+        if ($ariaPath -and -not (Test-Path (Join-Path $BuildDirectory "bin\aria2c.exe"))) {
+            $binDir = Join-Path $BuildDirectory "bin"
+            if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir -Force | Out-Null }
+            Copy-Item -Path $ariaPath -Destination (Join-Path $binDir "aria2c.exe") -Force
+        }
 
         & {
             powershell cmd /c uup_download_windows.cmd 2>&1 |
@@ -373,7 +387,11 @@ function Invoke-UupDownloadProcess {
         }
 
         if ($LASTEXITCODE) {
-            Write-Host "::warning title=Build failed::Dumping last 1500 raw log lines"
+            if ($env:GITHUB_ACTIONS -eq 'true') {
+                Write-Host "::warning title=Build failed::Dumping last 1500 raw log lines"
+            } else {
+                Write-Warning "Build failed. Dumping last 1500 raw log lines from $RawLogPath"
+            }
             Get-Content $RawLogPath -Tail 1500 | Write-Host
             throw "uup_download_windows.cmd failed with exit code $LASTEXITCODE"
         }
