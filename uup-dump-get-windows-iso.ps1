@@ -137,8 +137,8 @@ function Get-UupDumpIso($name, $target) {
         $result.response.editionFancyNames
                         } else {
         Write-CleanLine "Skipping.
-                L3: Expected langs=$lang.
-                L4: Got langs=$($langs -join ',')."
+        L3: Expected langs=$lang.
+        L4: Got langs=$($langs -join ',')."
         [PSCustomObject]@{}
                         }
                         $_.Value | Add-Member -NotePropertyMembers @{ editions = $eds }
@@ -177,7 +177,7 @@ function Get-UupDumpIso($name, $target) {
         }
                         } elseif ($editions -notcontains (Get-EditionName $edition)) {
         Write-CleanLine ("Skipping. Expected editions={0}.
-                L7: Got editions={1}." -f (Get-EditionName $edition), ($editions -join ','))
+        L7: Got editions={1}." -f (Get-EditionName $edition), ($editions -join ','))
         $res = $false
                         }
 
@@ -346,7 +346,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
             # DISM progress buckets; aria2 is not parsed here
             if (-not (Process-ProgressLine $line)) {
                                                         if ($line -match '^\s*(Mounting image|Saving image|Applying image|Exporting image|Unmounting image|Deployment Image Servicing and Management tool|^=== )') {
-                Reset-ProgressSession
+        Reset-ProgressSession
                                                         }
                                                         Write-CleanLine $line
             }
