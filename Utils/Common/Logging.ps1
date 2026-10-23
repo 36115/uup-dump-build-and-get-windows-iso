@@ -70,3 +70,17 @@ function Process-ProgressLine([string]$line) {
   [void](Emit-ProgressBucket $pct)
   return $true
 }
+
+function Get-RepoRoot([string]$startPath) {
+  $dir = if ($startPath) { $startPath } elseif ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+  while ($dir -and -not (Test-Path (Join-Path $dir ".git"))) {
+    $parent = Split-Path $dir -Parent
+    if (-not $parent -or $parent -eq $dir) { break }
+    $dir = $parent
+  }
+  if ($dir -and (Test-Path (Join-Path $dir ".git"))) {
+    return (Resolve-Path $dir).Path
+  }
+  return (Resolve-Path ".").Path
+}
+
