@@ -569,7 +569,7 @@ function Patch-BootWim {
         # Discover and execute WinPE component scripts from profile hierarchy
         $scannedScripts = [System.Collections.Generic.List[string]]::new()
         if ($ScriptsDir -and (Test-Path $ScriptsDir)) {
-            Get-ChildItem -Path $ScriptsDir -Filter "*.ps1" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '^Patch-BinaryPattern\.ps1$' } | ForEach-Object {
+            Get-ChildItem -Path $ScriptsDir -Filter "*.ps1" -File -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
                 if (-not $scannedScripts.Contains($_.FullName)) { $scannedScripts.Add($_.FullName) }
             }
         }
@@ -577,7 +577,7 @@ function Patch-BootWim {
             foreach ($sub in @("WinPE\Scripts", "All\Scripts")) {
                 $sDir = Join-Path $item.Dir $sub
                 if (Test-Path $sDir) {
-                    Get-ChildItem -Path $sDir -Filter "*.ps1" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '^Patch-BinaryPattern\.ps1$' } | ForEach-Object {
+                    Get-ChildItem -Path $sDir -Filter "*.ps1" -File -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
                         if (-not $scannedScripts.Contains($_.FullName)) { $scannedScripts.Add($_.FullName) }
                     }
                 }
