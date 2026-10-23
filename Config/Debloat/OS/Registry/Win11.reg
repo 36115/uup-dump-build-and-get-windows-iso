@@ -1,0 +1,359 @@
+Windows Registry Editor Version 5.00
+
+; Windows 11 Specific Registry Tweaks
+
+; Disable Automatic Install DevHome and Outlook (Windows 11)
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\DevHomeUpdate]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\OutlookUpdate]
+
+; Remove Chat (Windows 11)
+; Disable Chat Taskbar Settings
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Chat]
+"ChatIcon"=dword:00000003
+
+; Disable Taskbar Chat
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"TaskbarMn"=dword:00000000
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowCPL]
+"3"="Device Encryption"
+"12"="File History"
+
+; Hide Windows Settings Page (Non-Defender)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"SettingsPageVisibility"="hide:windowsdefender;deviceencryption;mobile-devices;gaming-gamebar;gaming-gamedvr;gaming-broadcasting;gaming-gamemode;gaming-xboxnetworking;gaming-trueplay;findmydevice;maps;videoplayback;appsforwebsites;home;remotedesktop;aicomponents;troubleshoot"
+
+; Custom Start Menu Pin (Windows 11)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current\device]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\current\device\Start]
+"ConfigureStartPins"="{\"pinnedList\":[{\"packagedAppId\":\"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel\"},{\"desktopAppId\":\"Microsoft.Windows.Explorer\"}]}"
+"ConfigureStartPins_ProviderSet"=dword:00000001
+"ConfigureStartPins_WinningProvider"="B5292708-1619-419B-9923-E5D9F3925E71"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71\default]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71\default\Device]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\providers\B5292708-1619-419B-9923-E5D9F3925E71\default\Device\Start]
+"ConfigureStartPins"="{\"pinnedList\":[{\"packagedAppId\":\"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel\"},{\"desktopAppId\":\"Microsoft.Windows.Explorer\"}]}"
+"ConfigureStartPins_LastWrite"=dword:00000001
+
+; Restore Legacy Notepad (Windows 11)
+; [HKEY_CLASSES_ROOT\*\shell\Edit]
+; [HKEY_CLASSES_ROOT\*\shell\Edit\command]
+; @="notepad.exe %1"
+; [HKEY_CLASSES_ROOT\Applications\notepad.exe]
+; "NoOpenWith"=-
+; [-HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\App Paths\notepad.exe]
+; [HKEY_CLASSES_ROOT\txtfilelegacy\DefaultIcon]
+; @="imageres.dll,-102"
+; [HKEY_CLASSES_ROOT\txtfilelegacy\shell\open\command]
+; @="C:\\Windows\\System32\\notepad.exe \"%1\""
+; [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\notepad.exe]
+; "UseFilter"=dword:00000000
+; Restore Legacy Notepad (Windows 11)
+; --- Fix Registry Deletions ---
+; Remove specific 'App Paths' entry for Notepad in Current User
+[-HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\App Paths\notepad.exe]
+
+; Remove 'NoOpenWith' value to allow Notepad to appear in Open With lists
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Applications\notepad.exe]
+"NoOpenWith"=-
+
+; --- File Associations and Context Menu Entries ---
+; Add Notepad to generic OpenWithList
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\*\OpenWithList\notepad.exe]
+
+; Add Notepad to .htm OpenWithList
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.htm\OpenWithList\notepad.exe]
+
+; Define File Types
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.inf]
+@="inffile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.ini]
+@="inifile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.log]
+@="txtfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.ps1]
+@="Microsoft.PowerShellScript.1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.psd1]
+@="Microsoft.PowerShellData.1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.psm1]
+@="Microsoft.PowerShellModule.1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.scp]
+@="txtfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.txt]
+@="txtfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.txt\ShellNew]
+"ItemName"="@%SystemRoot%\\system32\\notepad.exe,-470"
+"NullFile"=" "
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.wtx]
+@="txtfile"
+
+; --- Notepad Application Settings ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Applications\notepad.exe\shell\edit\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Applications\notepad.exe\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+; --- INF File Settings ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile]
+@="Setup Information"
+"FriendlyTypeName"="@%SystemRoot%\\System32\\setupapi.dll,-2000"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile\DefaultIcon]
+@="%SystemRoot%\\System32\\imageres.dll,-69"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inffile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+00,25,00,31,00,00,00
+
+; --- INI File Settings ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile]
+@="Configuration Settings"
+"EditFlags"=dword:00200000
+"FriendlyTypeName"="@shell32.dll,-10151"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile\DefaultIcon]
+@="%SystemRoot%\\system32\\imageres.dll,-69"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\inifile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+00,25,00,31,00,00,00
+
+; --- PowerShell File Settings ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellData.1]
+"EditFlags"=dword:00020000
+"FriendlyTypeName"="@\"%systemroot%\\system32\\windowspowershell\\v1.0\\powershell.exe\",-104"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellData.1\Shell\Open\Command]
+@="\"C:\\Windows\\System32\\notepad.exe\" \"%1\""
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellModule.1]
+"EditFlags"=dword:00020000
+"FriendlyTypeName"="@\"%systemroot%\\system32\\windowspowershell\\v1.0\\powershell.exe\",-106"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellModule.1\Shell\Open\Command]
+@="\"C:\\Windows\\System32\\notepad.exe\" \"%1\""
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellScript.1]
+"EditFlags"=dword:00020000
+"FriendlyTypeName"="@\"%systemroot%\\system32\\windowspowershell\\v1.0\\powershell.exe\",-103"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellScript.1\DefaultIcon]
+@="\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell_ise.exe\",1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Microsoft.PowerShellScript.1\Shell\Open\Command]
+@="\"C:\\Windows\\System32\\notepad.exe\" \"%1\""
+
+; --- System File Associations ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\text\OpenWithList\Notepad.exe]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\text\shell\edit\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\text\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+; --- TxtFile Settings ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile]
+@="Text Document"
+"EditFlags"=dword:00210000
+"FriendlyTypeName"="@%SystemRoot%\\system32\\notepad.exe,-469"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\DefaultIcon]
+@="%SystemRoot%\\system32\\imageres.dll,-102"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\shell\open\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,25,00,31,00,00,\
+00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\shell\print\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,20,\
+00,25,00,31,00,00,00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\txtfile\shell\printto\command]
+@=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,74,00,25,\
+00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,4e,00,4f,00,\
+54,00,45,00,50,00,41,00,44,00,2e,00,45,00,58,00,45,00,20,00,2f,00,70,00,74,\
+00,20,00,22,00,25,00,31,00,22,00,20,00,22,00,25,00,32,00,22,00,20,00,22,00,\
+25,00,33,00,22,00,20,00,22,00,25,00,34,00,22,00,00,00
+
+; --- Notepad Capabilities and Registration ---
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Notepad\Capabilities]
+"ApplicationDescription"="@%SystemRoot%\\system32\\NOTEPAD.EXE,-9"
+"ApplicationName"="@%SystemRoot%\\system32\\NOTEPAD.EXE,-9"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Notepad\Capabilities\FileAssociations]
+".ini"="inifile"
+".log"="logfile"
+".scp"="scpfile"
+".txt"="txtfile"
+".wtx"="wtxfile"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\RegisteredApplications]
+"Notepad"="Software\\Microsoft\\Windows\\Notepad\\Capabilities"
+
+[HKEY_CURRENT_USER\Software\Microsoft\Notepad]
+"ShowStoreBanner"=dword:00000000
+
+; Disable Windows for Install Driver
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata]
+"PreventDeviceMetadataFromNetwork"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DriverSearching]
+"DriverUpdateWizardWuSearchEnabled"=dword:00000000
+
+; Disable Automatic Install Microsoft Teams on Windows 11
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Communications]
+"ConfigureChatAutoInstall"=dword:00000000
+
+; Disable Forced Encryption/BitLocker (Windows 11)
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\BitLocker]
+"PreventDeviceEncryption"=dword:00000001
+
+; Disable Website Access of Language List
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Control Panel\International]
+"UserHttpAcceptLanguageOptOut"=dword:00000001
+
+; Turn off Cloud Content Search for Microsoft Account
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings]
+"IsMSACloudSearchEnabled"=dword:00000000
+
+; Disable Cloud Content Search for All Users
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search]
+"AllowCloudSearch"=dword:00000000
+
+; Bypass Windows 11 System Requirements
+[HKEY_CURRENT_USER\Control Panel\UnsupportedHardwareNotificationCache]
+"SV1"=dword:00000000
+"SV2"=dword:00000000
+
+[HKEY_USERS\.DEFAULT\Control Panel\UnsupportedHardwareNotificationCache]
+"SV1"=dword:00000000
+"SV2"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE]
+"BypassNRO"=dword:00000001
+
+; Disabling Reserved Storage
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager]
+"ShippedWithReserves"=dword:00000000
+
+; Disable OneDrive Folder Backup
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\OneDrive]
+"DisableFileSyncNGSC"=dword:00000001
+
+;Disable Resume App from Device and Continue
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CrossDeviceResume\Configuration]
+"IsResumeAllowed"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PolicyManager\default\Connectivity\DisableCrossDeviceResume]
+"value"=dword:00000001
+
+; 1694661260
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\FeatureManagement\Overrides\8\1387020943]
+"EnabledState"=dword:00000001
+"EnabledStateOptions"=dword:00000000
+"Variant"=dword:00000000
+"VariantPayload"=dword:00000000
+"VariantPayloadKind"=dword:00000000
+
+; Remove Home and Gallery from File Explorer in Windows 11
+; Home
+[HKEY_CURRENT_USER\Software\Classes\CLSID\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}]
+"System.IsPinnedToNameSpaceTree"=dword:00000000
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}]
+
+; Gallery
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}]
+
+; Set Recommended Troubleshooting to "Don't run any troubleshooters"
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\WindowsMitigation]
+"UserPreference"=dword:00000001
+
+; Disable Show Me Notifications in Settings
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SystemSettings\AccountNotifications]
+"EnableAccountNotifications"=dword:00000000
+
+; Disabled Show Account-Related Notifications
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_AccountNotifications"=dword:00000000
+
+; Disabled Security and Maintenance Notifications
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\Windows.SystemToast.SecurityAndMaintenance]
+"Enabled"=dword:00000000
+
+; Disabled Windows Malicious Software Removal Tool from Windows Update
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MRT]
+"DontOfferThroughWUAU"=dword:00000001
+
+; Turn off Share Across Devices for App Experiences
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CDP]
+"CdpSessionUserAuthzPolicy"=dword:00000000
+"RomeSdkChannelUserAuthzPolicy"=dword:00000000
+
+; Disabled Automatic Folder Type Discovery
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnce]
+"Disable Folder Discovery"="cmd.exe /C REG ADD \"HKCU\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell\" /v FolderType /t REG_SZ /d NotSpecified /f"
+
+; Disable EdgeWebView2 from Windows Search
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\FeatureManagement\Overrides\8\1694661260]
+"EnabledState"=dword:00000001
+"EnabledStateOptions"=dword:00000000
+"Variant"=dword:00000000
+"VariantPayload"=dword:00000000
+"VariantPayloadKind"=dword:00000000
