@@ -10,6 +10,7 @@ param(
         [switch]$esd,
         [switch]$drivers,
         [switch]$netfx3,
+        [string]$profileName,
         [string]$revision
 )
 
@@ -42,6 +43,9 @@ if (-not (Test-Path $setupScript)) {
 }
 
 if (Test-Path $setupScript) { . $setupScript }
+
+$imageServicingHelper = Join-Path $PSScriptRoot "Utils\Servicing\Invoke-ImageServicing.ps1"
+if (Test-Path $imageServicingHelper) { . $imageServicingHelper }
 
 # ------------------------------
 function Get-WindowsIso($name, $destinationDirectory) {
@@ -83,10 +87,16 @@ function Get-WindowsIso($name, $destinationDirectory) {
     -DriversSourceDir "Drivers" `
     -DriversDestDir (Join-Path $buildDirectory 'Drivers') `
     -NetFx3:$netfx3 `
-    -VirtualEdition $virtualEd
+    -VirtualEdition $virtualEd `
+
 
         Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
         Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
+
+
+        if ($debloat) {
+    Invoke-ImageServicing -buildDirectory $buildDirectory -title $title -architecture $architecture -esd:$esd
+        }
 
     Export-IsoArtifact -BuildDirectory $buildDirectory `
     -TargetDirectory $targetDirectory `
