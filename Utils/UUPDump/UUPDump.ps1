@@ -230,6 +230,159 @@ function Patch-Aria2-Flags {
   [System.IO.File]::WriteAllBytes($CmdPath, $newBytes)
 }
 
+function Get-EditionName([string]$e) {
+  switch ($e.ToLower()) {
+    "core"  { "Core" }
+    "home"  { "Core" }
+    "multi" { "Multi" }
+    default { "Professional" }
+  }
+}
+
+function Get-UupPackageZip {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$DownloadPackageUrl,
+
+    [Parameter(Mandatory = $true)]
+    [string]$DestinationDirectory,
+
+    [Parameter(Mandatory = $false)]
+    [string]$VirtualEdition = ""
+  )
+
+  $hasVirtual = -not [string]::IsNullOrWhiteSpace($VirtualEdition)
+  $body = if ($hasVirtual) {
+    @{ autodl = 3; updates = 1; cleanup = 1; 'virtualEditions[]' = $VirtualEdition }
+  } else {
+    @{ autodl = 2; updates = 1; cleanup = 1 }
+  }
+
+  $zipPath = "$DestinationDirectory.zip"
+  Invoke-WebRequest -Method Post -Uri $DownloadPackageUrl -Body $body -OutFile $zipPath | Out-Null
+  Expand-Archive -Path $zipPath -DestinationPath $DestinationDirectory -Force
+}
+
+function Set-UupConvertConfig {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ConfigFile,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Esd,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Drivers,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Architecture = "x64",
+
+    [Parameter(Mandatory = $false)]
+    [string]$DriversSourceDir = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$DriversDestDir = "",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$NetFx3,
+
+    [Parameter(Mandatory = $false)]
+    [string]$VirtualEdition = ""
+  )
+
+  $convertConfig = (Get-Content $ConfigFile) `
+    -replace '^(AutoExit\s*)=.*','$1=1' `
+    -replace '^(ResetBase\s*)=.*','$1=1' `
+    -replace '^(Cleanup\s*)=.*','$1=1'
+
+  $tag = ""
+  if ($Esd) {
+    $convertConfig = $convertConfig -replace '^(wim2esd\s*)=.*', '$1=1'
+    $tag += ".E"
+  }
+  if ($Drivers -and $Architecture -ne "arm64") {
+    $convertConfig = $convertConfig -replace '^(AddDrivers\s*)=.*', '$1=1'
+    $tag += ".D"
+    if ($DriversSourceDir -and (Test-Path $DriversSourceDir) -and $DriversDestDir) {
+      if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+        Write-CleanLine "Copy Dell drivers to $DriversDestDir directory"
+      } else {
+        Write-Host "Copy Dell drivers to $DriversDestDir directory"
+      }
+      Copy-Item -Path $DriversSourceDir -Destination $DriversDestDir -Recurse -Force
+    }
+  }
+  if ($NetFx3) {
+    $convertConfig = $convertConfig -replace '^(NetFx3\s*)=.*', '$1=1'
+    $tag += ".N"
+  }
+  if (-not [string]::IsNullOrWhiteSpace($VirtualEdition)) {
+    $convertConfig = $convertConfig `
+      -replace '^(StartVirtual\s*)=.*','$1=1' `
+      -replace '^(vDeleteSource\s*)=.*','$1=1' `
+      -replace '^(vAutoEditions\s*)=.*',"`$1=$VirtualEdition"
+  }
+
+  Set-Content -Encoding ascii -Path $ConfigFile -Value $convertConfig
+  return $tag
+}
+
+function Invoke-UupDownloadProcess {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$BuildDirectory,
+
+    [Parameter(Mandatory = $false)]
+    [string]$RawLogPath = ""
+  )
+
+  Push-Location $BuildDirectory
+  try {
+    # Patch aria2 flags in the batch before running it
+    Patch-Aria2-Flags -CmdPath (Join-Path $BuildDirectory 'uup_download_windows.cmd')
+
+    if ([string]::IsNullOrWhiteSpace($RawLogPath)) {
+      $tempDir = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
+      $RawLogPath = Join-Path $tempDir "uup_dism_aria2_raw.log"
+    }
+
+    choco install aria2 /y *> $null
+
+    & {
+      powershell cmd /c uup_download_windows.cmd 2>&1 |
+        Tee-Object -FilePath $RawLogPath |
+        ForEach-Object {
+          $raw = [string]$_
+          if ([string]::IsNullOrEmpty($raw)) { return }
+          foreach ($crChunk in ($raw -split "`r")) {
+            foreach ($line in ($crChunk -split "`n")) {
+              if ($line -eq $null) { continue }
+              # DISM progress buckets; aria2 is not parsed here
+              if (-not (Process-ProgressLine $line)) {
+                if ($line -match '^\s*(Mounting image|Saving image|Applying image|Exporting image|Unmounting image|Deployment Image Servicing and Management tool|^=== )') {
+                  Reset-ProgressSession
+                }
+                Write-CleanLine $line
+              }
+            }
+          }
+        }
+    }
+
+    if ($LASTEXITCODE) {
+      Write-Host "::warning title=Build failed::Dumping last 1500 raw log lines"
+      Get-Content $RawLogPath -Tail 1500 | Write-Host
+      throw "uup_download_windows.cmd failed with exit code $LASTEXITCODE"
+    }
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 
 function Get-UupArchitecture {
     [CmdletBinding()]

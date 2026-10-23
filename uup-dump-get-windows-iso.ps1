@@ -48,6 +48,7 @@ if (-not (Test-Path $isoHelper)) {
 }
 if (Test-Path $isoHelper) { . $isoHelper }
 
+# ------------------------------
 function Get-WindowsIso($name, $destinationDirectory) {
     $arch = Get-UupArchitecture -Architecture $architecture
   $preview = $false
@@ -76,71 +77,21 @@ function Get-WindowsIso($name, $destinationDirectory) {
   $title = "$name $edn $($iso.build)"
 
   Write-CleanLine "Downloading the UUP dump download package for $title from $($iso.downloadPackageUrl)"
-  $downloadPackageBody = if ($hasVirtualMember) { @{ autodl=3; updates=1; cleanup=1; 'virtualEditions[]'=$iso.virtualEdition } } else { @{ autodl=2; updates=1; cleanup=1 } }
-  Invoke-WebRequest -Method Post -Uri $iso.downloadPackageUrl -Body $downloadPackageBody -OutFile "$buildDirectory.zip" | Out-Null
-  Expand-Archive "$buildDirectory.zip" $buildDirectory
+  $virtualEd = if ($hasVirtualMember) { $iso.virtualEdition } else { "" }
+  Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
 
-  $convertConfig = (Get-Content $buildDirectory/ConvertConfig.ini) `
-    -replace '^(AutoExit\s*)=.*','$1=1' `
-    -replace '^(ResetBase\s*)=.*','$1=1' `
-    -replace '^(Cleanup\s*)=.*','$1=1'
-
-  $tag = ""
-  if ($esd) { $convertConfig = $convertConfig -replace '^(wim2esd\s*)=.*', '$1=1'; $tag += ".E" }
-  if ($drivers -and $arch -ne "arm64") {
-    $convertConfig = $convertConfig -replace '^(AddDrivers\s*)=.*', '$1=1'
-    $tag += ".D"
-    Write-CleanLine "Copy Dell drivers to $buildDirectory directory"
-    Copy-Item -Path Drivers -Destination $buildDirectory/Drivers -Recurse
-  }
-  if ($netfx3) { $convertConfig = $convertConfig -replace '^(NetFx3\s*)=.*', '$1=1'; $tag += ".N" }
-  if ($hasVirtualMember) {
-    $convertConfig = $convertConfig `
-      -replace '^(StartVirtual\s*)=.*','$1=1' `
-      -replace '^(vDeleteSource\s*)=.*','$1=1' `
-      -replace '^(vAutoEditions\s*)=.*',"`$1=$($iso.virtualEdition)"
-  }
-  Set-Content -Encoding ascii -Path $buildDirectory/ConvertConfig.ini -Value $convertConfig
+  $iniFile = Join-Path $buildDirectory 'ConvertConfig.ini'
+  $tag = Set-UupConvertConfig -ConfigFile $iniFile `
+    -Esd:$esd `
+    -Drivers:$drivers `
+    -Architecture $arch `
+    -DriversSourceDir "Drivers" `
+    -DriversDestDir (Join-Path $buildDirectory 'Drivers') `
+    -NetFx3:$netfx3 `
+    -VirtualEdition $virtualEd
 
   Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
-  Push-Location $buildDirectory
-
-  # Patch aria2 flags in the batch before running it
-  Patch-Aria2-Flags -CmdPath (Join-Path $buildDirectory 'uup_download_windows.cmd')
-
-  # Raw log path
-  $rawLog = Join-Path $env:RUNNER_TEMP "uup_dism_aria2_raw.log"
-
-  choco install aria2 /y *> $null
-
-  & {
-    powershell cmd /c uup_download_windows.cmd 2>&1 |
-      Tee-Object -FilePath $rawLog |
-      ForEach-Object {
-        $raw = [string]$_
-        if ([string]::IsNullOrEmpty($raw)) { return }
-        foreach ($crChunk in ($raw -split "`r")) {
-          foreach ($line in ($crChunk -split "`n")) {
-            if ($line -eq $null) { continue }
-            # DISM progress buckets; aria2 is not parsed here
-            if (-not (Process-ProgressLine $line)) {
-              if ($line -match '^\s*(Mounting image|Saving image|Applying image|Exporting image|Unmounting image|Deployment Image Servicing and Management tool|^=== )') {
-                Reset-ProgressSession
-              }
-              Write-CleanLine $line
-            }
-          }
-        }
-      }
-  }
-
-  if ($LASTEXITCODE) {
-    Write-Host "::warning title=Build failed::Dumping last 1500 raw log lines"
-    Get-Content $rawLog -Tail 1500 | Write-Host
-    throw "uup_download_windows.cmd failed with exit code $LASTEXITCODE"
-  }
-
-  Pop-Location
+  Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
 
   $sourceIsoPath = Resolve-Path $buildDirectory/*.iso
   $IsoName = Split-Path $sourceIsoPath -leaf
