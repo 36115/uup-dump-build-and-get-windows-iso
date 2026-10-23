@@ -182,6 +182,51 @@ function Get-IsoWindowsImages {
     }
 }
 
+function Set-IsoChecksum {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$IsoPath,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ChecksumPath = ""
+    )
+
+    $IsoPath = (Resolve-Path $IsoPath).Path
+    if ([string]::IsNullOrWhiteSpace($ChecksumPath)) {
+        $ChecksumPath = "$IsoPath.sha256.txt"
+    }
+
+    if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+        Write-CleanLine "Getting the $IsoPath checksum"
+    } else {
+        Write-Host "Getting the $IsoPath checksum"
+    }
+
+    $hash = (Get-FileHash -Algorithm SHA256 $IsoPath).Hash.ToLowerInvariant()
+    Set-Content -Encoding ascii -NoNewline -Path $ChecksumPath -Value $hash
+    return $hash
+}
+
+function Export-IsoMetadata {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$MetadataPath,
+
+        [Parameter(Mandatory = $true)]
+        [psobject]$Metadata
+    )
+
+    $dir = Split-Path $MetadataPath -Parent
+    if ($dir -and -not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+
+    $json = ($Metadata | ConvertTo-Json -Depth 99) -replace '\\u0026','&'
+    Set-Content -Encoding utf8 -Path $MetadataPath -Value $json
+}
+
 function Resolve-TargetDirectory {
     [CmdletBinding()]
     param(
@@ -204,4 +249,59 @@ function Resolve-TargetDirectory {
         New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
     }
     return $targetDir
+}
+
+function Export-IsoArtifact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory,
+        [Parameter(Mandatory = $true)]
+        [string]$TargetDirectory,
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [psobject]$IsoInfo,
+        [Parameter(Mandatory = $true)]
+        [string]$VersionBuild,
+        [Parameter(Mandatory = $false)]
+        [string]$Tag = ""
+    )
+    $sourceIsoPath = Resolve-Path (Join-Path $BuildDirectory "*.iso")
+    $isoName = Split-Path $sourceIsoPath -Leaf
+
+    $finalIsoPath = Join-Path $TargetDirectory $isoName
+    $destinationIsoChecksumPath = "$finalIsoPath.sha256.txt"
+    $destinationIsoMetadataPath = "$finalIsoPath.json"
+
+    $isoChecksum = Set-IsoChecksum -IsoPath $sourceIsoPath -ChecksumPath $destinationIsoChecksumPath
+    $windowsImages = Get-IsoWindowsImages $sourceIsoPath
+    Export-IsoMetadata -MetadataPath $destinationIsoMetadataPath -Metadata ([PSCustomObject]@{
+        name     = $Name
+        title    = $IsoInfo.title
+        build    = $IsoInfo.build
+        version  = $VersionBuild
+        tags     = $Tag
+        checksum = $isoChecksum
+        images   = @($windowsImages)
+        uupDump  = @{
+            id                 = $IsoInfo.id
+            apiUrl             = $IsoInfo.apiUrl
+            downloadUrl        = $IsoInfo.downloadUrl
+            downloadPackageUrl = $IsoInfo.downloadPackageUrl
+        }
+    })
+
+    if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+        Write-CleanLine "Moving the created $sourceIsoPath to $finalIsoPath"
+    }
+    Move-Item -Force $sourceIsoPath $finalIsoPath
+    Remove-Item -Force -Recurse $BuildDirectory -ErrorAction SilentlyContinue | Out-Null
+
+    if ($env:GITHUB_ENV) {
+        Write-Output "ISO_NAME=$isoName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    }
+    if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+        Write-CleanLine 'All Done.'
+    }
 }
