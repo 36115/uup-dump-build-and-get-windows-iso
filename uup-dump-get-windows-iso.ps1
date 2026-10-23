@@ -127,7 +127,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
             # DISM progress buckets; aria2 is not parsed here
             if (-not (Process-ProgressLine $line)) {
                                                         if ($line -match '^\s*(Mounting image|Saving image|Applying image|Exporting image|Unmounting image|Deployment Image Servicing and Management tool|^=== )') {
-                Reset-ProgressSession
+        Reset-ProgressSession
                                                         }
                                                         Write-CleanLine $line
             }
