@@ -43,24 +43,12 @@ if (-not (Test-Path $uupDumpHelper)) {
 
 if (Test-Path $uupDumpHelper) { . $uupDumpHelper }
 
-function Get-IsoWindowsImages($isoPath) {
-                $isoPath = Resolve-Path $isoPath
-                Write-CleanLine "Mounting $isoPath"
-                $isoImage = Mount-DiskImage $isoPath -PassThru
-                try {
-                                $isoVolume = $isoImage | Get-Volume
-                                $installPath = if ($esd) { "$($isoVolume.DriveLetter):\sources\install.esd" } else { "$($isoVolume.DriveLetter):\sources\install.wim" }
-                                Write-CleanLine "Getting Windows images from $installPath"
-                                Get-WindowsImage -ImagePath $installPath | ForEach-Object {
-                                                $image = Get-WindowsImage -ImagePath $installPath -Index $_.ImageIndex
-                                                [PSCustomObject]@{ index = $image.ImageIndex; name = $image.ImageName; version = $image.Version }
-                                }
-                }
-                finally {
-                                Write-CleanLine "Dismounting $isoPath"
-                                Dismount-DiskImage $isoPath | Out-Null
-                }
+$isoHelper = Join-Path $PSScriptRoot "Utils\ISO\New-IsoImage.ps1"
+if (-not (Test-Path $isoHelper)) {
+                $isoHelper = Join-Path (Split-Path $PSScriptRoot -Parent) "Utils\ISO\New-IsoImage.ps1"
 }
+
+if (Test-Path $isoHelper) { . $isoHelper }
 
 function Get-WindowsIso($name, $destinationDirectory) {
                                 $arch = Get-UupArchitecture -Architecture $architecture
