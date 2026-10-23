@@ -34,7 +34,8 @@ $repoRoot = Get-RepoRoot $PSScriptRoot
 # Configure Windows Defender exclusions
 if ($IsWindows -or ($env:OS -like "*Windows*")) {
     Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-    Add-MpPreference -ExclusionPath $env:TEMP, "C:\output", "D:\output" -ErrorAction SilentlyContinue
+    $outDir = Join-Path $repoRoot "Out"
+    Add-MpPreference -ExclusionPath $env:TEMP, $outDir -ErrorAction SilentlyContinue
 
     # Cleanup any stale WIM mounts from prior interrupted runs
     & dism.exe /Cleanup-Wim *> $null
