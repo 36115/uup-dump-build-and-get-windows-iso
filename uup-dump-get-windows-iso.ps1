@@ -87,42 +87,11 @@ function Get-WindowsIso($name, $destinationDirectory) {
                 Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
                 Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
 
-                $sourceIsoPath = Resolve-Path $buildDirectory/*.iso
-                $IsoName = Split-Path $sourceIsoPath -leaf
-
-                $finalIsoPath = Join-Path $targetDirectory $IsoName
-                $destinationIsoChecksumPath = "$finalIsoPath.sha256.txt"
-                $destinationIsoMetadataPath = "$finalIsoPath.json"
-
-                Write-CleanLine "Getting the $sourceIsoPath checksum"
-                $isoChecksum = (Get-FileHash -Algorithm SHA256 $sourceIsoPath).Hash.ToLowerInvariant()
-                Set-Content -Encoding ascii -NoNewline -Path $destinationIsoChecksumPath -Value $isoChecksum
-
-                $windowsImages = Get-IsoWindowsImages $sourceIsoPath
-                Set-Content -Path $destinationIsoMetadataPath -Value (
-                                ([PSCustomObject]@{
-                                                name    = $name
-                                                title   = $iso.title
-                                                build   = $iso.build
-                                                version = $verbuild
-                                                tags    = $tag
-                                                checksum = $isoChecksum
-                                                images  = @($windowsImages)
-                                                uupDump = @{
-                                                                id                 = $iso.id
-                                                                apiUrl             = $iso.apiUrl
-                                                                downloadUrl        = $iso.downloadUrl
-                                                                downloadPackageUrl = $iso.downloadPackageUrl
-                                                }
-                                } | ConvertTo-Json -Depth 99) -replace '\\u0026','&'
-                )
-
-                Write-CleanLine "Moving the created $sourceIsoPath to $finalIsoPath"
-                Move-Item -Force $sourceIsoPath $finalIsoPath
-                Remove-Item -Force -Recurse $buildDirectory -ErrorAction SilentlyContinue | Out-Null
-
-                Write-Output "ISO_NAME=$IsoName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-                Write-CleanLine 'All Done.'
-}
+                                Export-IsoArtifact -BuildDirectory $buildDirectory `
+                                -TargetDirectory $targetDirectory `
+                                -Name $name `
+                                -IsoInfo $iso `
+                                -VersionBuild $verbuild `
+                                -Tag $tag}
 
 Get-WindowsIso $windowsTargetName $destinationDirectory
