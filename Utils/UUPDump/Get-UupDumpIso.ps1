@@ -251,6 +251,21 @@ function Get-EditionName([string]$e) {
     return (Get-EditionInfo $e).Base
 }
 
+function Get-EditionPriority([string]$filename) {
+    $f = $filename.ToLower()
+    if ($f -match 'homesl|coresinglelanguage') { return 2 }
+    if ($f -match 'home|core')                 { return 1 }
+    if ($f -match 'proworkstation|workstation'){ return 5 }
+    if ($f -match 'proeducation')              { return 4 }
+    if ($f -match 'pro|professional')          { return 3 }
+    if ($f -match 'education')                 { return 6 }
+    if ($f -match 'iotenterprisek')            { return 9 }
+    if ($f -match 'iotenterprise')             { return 8 }
+    if ($f -match 'enterprise')                { return 7 }
+    if ($f -match 'serverrdsh|multisession')   { return 10 }
+    return 11
+}
+
 function Get-UupPackageZip {
     [CmdletBinding()]
     param(
@@ -274,6 +289,32 @@ function Get-UupPackageZip {
     $zipPath = "$DestinationDirectory.zip"
     Invoke-WebRequest -Method Post -Uri $DownloadPackageUrl -Body $body -OutFile $zipPath | Out-Null
     Expand-Archive -Path $zipPath -DestinationPath $DestinationDirectory -Force
+}
+
+function Set-IniSetting {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$IniText,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    $escapedKey = [regex]::Escape($Key)
+    $pattern = "(?m)^(\s*$escapedKey\s*=).*"
+    if ($IniText -match $pattern) {
+        return [regex]::Replace($IniText, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) "$($m.Groups[1].Value)$Value" })
+    } else {
+        if ($IniText -match "(?m)^\[convert-UUP\]") {
+            return [regex]::Replace($IniText, "(?m)^\[convert-UUP\]", [System.Text.RegularExpressions.MatchEvaluator]{ param($m) "$($m.Value)`r`n$Key=$Value" })
+        } else {
+            return "$IniText`r`n$Key=$Value"
+        }
+    }
 }
 
 function Set-UupConvertConfig {
@@ -301,21 +342,42 @@ function Set-UupConvertConfig {
         [switch]$NetFx3,
 
         [Parameter(Mandatory = $false)]
-        [string]$VirtualEdition = ""
+        [string]$VirtualEdition = "",
+
+        [Parameter(Mandatory = $false)]
+        [switch]$WimOnly,
+
+        [Parameter(Mandatory = $false)]
+        [System.Collections.IDictionary]$ConvertConfigOverrides = @{}
     )
 
-    $convertConfig = (Get-Content $ConfigFile) `
-        -replace '^(AutoExit\s*)=.*','$1=1' `
-        -replace '^(ResetBase\s*)=.*','$1=1' `
-        -replace '^(Cleanup\s*)=.*','$1=1'
+    $convertConfig = Get-Content -Path $ConfigFile -Raw
+
+    # Baseline defaults if not explicitly overridden
+    $effectiveOverrides = [ordered]@{
+        'AutoExit'  = '1'
+        'ResetBase' = '1'
+        'Cleanup'   = '1'
+    }
+    if ($ConvertConfigOverrides) {
+        foreach ($k in $ConvertConfigOverrides.Keys) {
+            $effectiveOverrides[$k.ToString()] = $ConvertConfigOverrides[$k].ToString()
+        }
+    }
+
+    foreach ($entry in $effectiveOverrides.GetEnumerator()) {
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key $entry.Key -Value $entry.Value
+    }
 
     $tag = ""
     if ($Esd) {
-        $convertConfig = $convertConfig -replace '^(wim2esd\s*)=.*', '$1=1'
         $tag += ".E"
+        if (-not $effectiveOverrides.Contains('wim2esd') -or $effectiveOverrides['wim2esd'] -ne '0') {
+            $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'wim2esd' -Value '1'
+        }
     }
     if ($Drivers -and $Architecture -ne "arm64") {
-        $convertConfig = $convertConfig -replace '^(AddDrivers\s*)=.*', '$1=1'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'AddDrivers' -Value '1'
         $tag += ".D"
         if ($DriversSourceDir -and (Test-Path $DriversSourceDir) -and $DriversDestDir) {
             if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
@@ -327,14 +389,19 @@ function Set-UupConvertConfig {
         }
     }
     if ($NetFx3) {
-        $convertConfig = $convertConfig -replace '^(NetFx3\s*)=.*', '$1=1'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'NetFx3' -Value '1'
         $tag += ".N"
     }
     if (-not [string]::IsNullOrWhiteSpace($VirtualEdition)) {
-        $convertConfig = $convertConfig `
-            -replace '^(StartVirtual\s*)=.*','$1=1' `
-            -replace '^(vDeleteSource\s*)=.*','$1=1' `
-            -replace '^(vAutoEditions\s*)=.*',"`$1=$VirtualEdition"
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'StartVirtual' -Value '1'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vDeleteSource' -Value '1'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vAutoEditions' -Value $VirtualEdition
+    }
+    if ($WimOnly) {
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'SkipISO' -Value '1'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vSkipISO' -Value '1'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'wim2esd' -Value '0'
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vwim2esd' -Value '0'
     }
 
     Set-Content -Encoding ascii -Path $ConfigFile -Value $convertConfig
