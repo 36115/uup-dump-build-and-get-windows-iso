@@ -461,14 +461,14 @@ function Get-UupTargetDefinition {
 
     $targets = @{
         "windows-10"           = @{ search="windows 10 19045$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
-        "windows-11old"        = @{ search="windows 11 22631$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
-        "windows-11"           = @{ search="windows 11 26100$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
-        "windows-11new"        = @{ search="windows 11 26200$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
-        "windows-11beta"       = @{ search="windows 11 26120$dotRev $Architecture"; edition=$edInfo.Base; ring="Beta"; virtualEdition=$edInfo.Virtual }
-        "windows-11dev"        = @{ search="windows 11 26220$dotRev $Architecture"; edition=$edInfo.Base; ring="Wif"; virtualEdition=$edInfo.Virtual }
-        "windows-1126h1"       = @{ search="windows 11 28000$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
-        "windows-1126h2"       = @{ search="windows 11 26300$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
-        "windows-1126h2beta"   = @{ search="windows 11 26340$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
+        "windows-11@23h2"      = @{ search="windows 11 22631$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
+        "windows-11@24h2"      = @{ search="windows 11 26100$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
+        "windows-11@24h2_beta" = @{ search="windows 11 26120$dotRev $Architecture"; edition=$edInfo.Base; ring="Beta"; virtualEdition=$edInfo.Virtual }
+        "windows-11@25h2"      = @{ search="windows 11 26200$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
+        "windows-11@25h2_beta" = @{ search="windows 11 26220$dotRev $Architecture"; edition=$edInfo.Base; ring="Wif"; virtualEdition=$edInfo.Virtual }
+        "windows-11@26h1"      = @{ search="windows 11 28000$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
+        "windows-11@26h2"      = @{ search="windows 11 26300$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
+        "windows-11@26h2_exp"  = @{ search="windows 11 26340$dotRev $Architecture"; edition=$edInfo.Base; virtualEdition=$edInfo.Virtual }
         "windows-dev"          = @{ search="windows 11 26300$dotRev $Architecture"; edition=$edInfo.Base; ring="Dev"; virtualEdition=$edInfo.Virtual }
         "windows-canary"       = @{ search="windows 11$spaceRev $Architecture"; edition=$edInfo.Base; ring="Canary"; virtualEdition=$edInfo.Virtual }
     }
