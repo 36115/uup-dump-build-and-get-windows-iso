@@ -291,7 +291,8 @@ jobs:
 
           Add-Content $env:GITHUB_STEP_SUMMARY @"
           | Checksum | $($iso.checksum) |
-          | Iso | [$env:ISO_NAME]($env:artifact_url) |
+          | Run ID | [#$env:GITHUB_RUN_ID]($env:artifact_url) |
+          | Download | [$env:ISO_NAME](https://nightly.link/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/$($env:ISO_NAME).zip) |
           | UUP dump | [$($iso.title)]($($iso.uupDump.downloadUrl)) |
           "@
 
