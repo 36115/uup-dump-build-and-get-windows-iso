@@ -1,7 +1,7 @@
 name: Build Windows
 run-name: >
   ${{ inputs.versions }}
-  ${{ fromJSON('{"Pro":"Pro","Home":"Home","Multi":"Multi"}')[inputs.edition] || inputs.edition }}
+  ${{ fromJSON('{"Pro":"Pro","Home":"Home","Multi":"Multi","HomeSingleLanguage":"Home-SL","Enterprise":"Enterprise","Education":"Education","ProfessionalWorkstation":"Pro-Workstation","ProfessionalEducation":"Pro-Education","IoTEnterprise":"IoT-Enterprise","IoTEnterpriseK":"IoT-Enterprise-K","ServerRdsh":"Server-RDSH"}')[inputs.edition] || inputs.edition }}
   (${{ inputs.architecture }}, ${{ fromJSON('{
     "Arabic (Saudi Arabia)":"ar-SA","Bulgarian (Bulgaria)":"bg-BG","Czech (Czech Republic)":"cs-CZ","Danish (Denmark)":"da-DK","German (Germany)":"de-DE","Greek (Greece)":"el-GR",
     "English (United Kingdom)":"en-GB","English (United States)":"en-US","Spanish (Spain)":"es-ES","Spanish (Mexico)":"es-MX","Estonian (Estonia)":"et-EE","Finnish (Finland)":"fi-FI",
@@ -43,7 +43,18 @@ on:
       edition:
         description: "Windows edition to build"
         type: choice
-        options: [Pro, Home, Multi]
+        options:
+          - Education
+          - Enterprise
+          - Home
+          - HomeSingleLanguage
+          - IoTEnterprise
+          - IoTEnterpriseK
+          - Multi
+          - Pro
+          - ProfessionalEducation
+          - ProfessionalWorkstation
+          - ServerRdsh
         default: Pro
         required: true
       language:
@@ -324,7 +335,25 @@ jobs:
           echo "title=$($iso.title)" >> $env:GITHUB_ENV
           echo "images=$($finalImageName)" >> $env:GITHUB_ENV
           echo "iso_checksum=$($iso.checksum)" >> $env:GITHUB_ENV
-          echo "tagname=$($iso.build).$($iso.version).${{ fromJSON('{"Pro":"Pro","Home":"Home","Multi":"Multi"}')[inputs.edition] || inputs.edition }}.${{ inputs.architecture }}.${{ steps.map.outputs.lang }}$($iso.tags)" >> $env:GITHUB_ENV
+
+          $ednTagMap = @{
+            "Pro"                     = "Pro"
+            "Home"                    = "Home"
+            "HomeSingleLanguage"      = "Home-SL"
+            "Enterprise"              = "Enterprise"
+            "Education"               = "Education"
+            "ProfessionalWorkstation" = "Pro-Workstation"
+            "ProfessionalEducation"   = "Pro-Education"
+            "IoTEnterprise"           = "IoT-Enterprise"
+            "IoTEnterpriseK"          = "IoT-Enterprise-K"
+            "ServerRdsh"              = "Server-RDSH"
+            "Multi"                   = "Multi"
+          }
+          $ednTag = if ($ednTagMap.ContainsKey('${{ inputs.edition }}')) { $ednTagMap['${{ inputs.edition }}'] } else { '${{ inputs.edition }}' }
+
+          $rawTag = "$($iso.build).$($iso.version).$ednTag.${{ inputs.architecture }}.${{ steps.map.outputs.lang }}$($iso.tags)"
+          $cleanTag = ($rawTag -replace '\.\.+', '.') -replace '\.+$', ''
+          echo "tagname=$cleanTag" >> $env:GITHUB_ENV
 
       - name: Create Release
         id: create_release
@@ -338,7 +367,7 @@ jobs:
           draft: false
           prerelease: ${{ !contains(fromJson('["Windows 10 22H2","Windows 11 23H2","Windows 11 24H2","Windows 11 25H2","Windows 11 26H1","Windows 11 26H2"]'), inputs.versions) }}
           files: |
-            Out/Target/**/${{ env.ISO_NAME }}.zip.0*
+            Out/Target/**/$($env:ISO_NAME).zip.0*
 
       - name: Generate platform packages
         if: ${{ success() }}

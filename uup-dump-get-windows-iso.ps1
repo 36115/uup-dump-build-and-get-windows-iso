@@ -4,7 +4,7 @@ param(
                 [string]$windowsTargetName,
                 [string]$destinationDirectory = 'Out',
                 [ValidateSet("x64", "arm64")] [string]$architecture = "x64",
-                [ValidateSet("pro", "core", "multi", "home")] [string]$edition = "pro",
+                [ValidateSet("pro", "core", "multi", "home", "homesinglelanguage", "enterprise", "education", "professionalworkstation", "proworkstation", "professionaleducation", "proeducation", "iotenterprise", "iotenterprisek", "serverrdsh")] [string]$edition = "pro",
                 [ValidateSet("nb-no", "fr-ca", "fi-fi", "lv-lv", "es-es", "en-gb", "zh-tw", "th-th", "sv-se", "en-us", "es-mx", "bg-bg", "hr-hr", "pt-br", "el-gr", "cs-cz", "it-it", "sk-sk", "pl-pl", "sl-si", "neutral", "ja-jp", "et-ee", "ro-ro", "fr-fr", "pt-pt", "ar-sa", "lt-lt", "hu-hu", "da-dk", "zh-cn", "uk-ua", "tr-tr", "ru-ru", "nl-nl", "he-il", "ko-kr", "sr-latn-rs", "de-de")]
                 [string]$lang = "en-us",
                 [switch]$esd,
@@ -53,9 +53,10 @@ function Get-WindowsIso($name, $destinationDirectory) {
                 $iso = Get-UupDumpIso $name $targetDef
                 if (-not $iso) { throw "Can't find UUP for $name ($($targetDef.search)), lang=$lang." }
 
-                $isoHasEdition    = $iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition
-                $hasVirtualMember = $iso.PSObject.Properties.Name -contains 'virtualEdition' -and $iso.virtualEdition
-                $effectiveEdition = if ($isoHasEdition) { $iso.edition } else { $targetDef.edition }
+                $edInfo = Get-EditionInfo $edition
+                $hasVirtualMember = [bool]$edInfo.Virtual
+                $virtualEdn = $edInfo.Virtual
+                $effectiveEdition = if ($hasVirtualMember) { $virtualEdn } elseif ($iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition) { $iso.edition } else { $targetDef.edition }
 
                 $verbuild = Get-UupVersionBuild -Title $iso.title -Build $iso.build -IsPreview $preview -Ring $ringLower
 
@@ -66,12 +67,12 @@ function Get-WindowsIso($name, $destinationDirectory) {
                 if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
                 New-Item -ItemType Directory -Force $buildDirectory | Out-Null
 
-                $edn = if ($hasVirtualMember) { $iso.virtualEdition } else { $effectiveEdition }
+                $edn = if ($hasVirtualMember) { $virtualEdn } else { $effectiveEdition }
                 Write-CleanLine $edn
                 $title = "$name $edn $($iso.build)"
 
                 Write-CleanLine "Downloading the UUP dump download package for $title from $($iso.downloadPackageUrl)"
-                $virtualEd = if ($hasVirtualMember) { $iso.virtualEdition } else { "" }
+                $virtualEd = if ($hasVirtualMember) { $virtualEdn } else { "" }
                 Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
 
                 $iniFile = Join-Path $buildDirectory 'ConvertConfig.ini'
