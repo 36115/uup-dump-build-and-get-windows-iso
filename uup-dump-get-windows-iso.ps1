@@ -170,14 +170,11 @@ function Get-WindowsIso($name, $destinationDirectory) {
                                                 Remove-Item $installWim -Force
                                 }
 
-                                # Clean SourceIso media and service boot.wim using Build-BaseISO.ps1 on uupdump's distribution folder
+                                # Clean SourceIso media and service boot.wim using New-BaseIsoMedia on uupdump's distribution folder
                                 $baseInput = if ($sourceIso -and (Test-Path $sourceIso)) { $sourceIso } else { $distDir }
-                                Write-CleanLine "Running Build-BaseISO.ps1 on $baseInput..."
-                                $baseScript = Join-Path $PSScriptRoot "Config\All\Debloat\OS\Scripts\ISO\Build-BaseISO.ps1"
-                                if (-not (Test-Path $baseScript)) { $baseScript = Join-Path $PSScriptRoot "Config\ISO\Build-BaseISO.ps1" }
+                                Write-CleanLine "Extracting and servicing clean base media from $baseInput..."
                                 $cleanSourceIsoDir = Join-Path $buildDirectory "CleanSourceIso"
-                                & powershell -ExecutionPolicy Bypass -File $baseScript -SourceIsoPath $baseInput -OutputDirectory $cleanSourceIsoDir
-                                if ($LASTEXITCODE -ne 0) { throw "Build-BaseISO.ps1 failed with exit code $LASTEXITCODE" }
+                                New-BaseIsoMedia -SourceIsoPath $baseInput -OutputDirectory $cleanSourceIsoDir -OsFamily $osFamily -ProfileName $resolvedProfile
 
                                 # Copy serviced install image into the clean SourceIso media
                                 $servicedInstallWim = Join-Path $distDir "sources\install.wim"
