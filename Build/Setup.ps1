@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Environment and tooling bootstrap script for uup-dump-build-and-get-windows-iso.
 .DESCRIPTION
@@ -40,7 +40,7 @@ if ($IsWindows -or ($env:OS -like "*Windows*")) {
 $utilsDir = Join-Path $repoRoot "Utils"
 if (Test-Path $utilsDir) {
     $helperFiles = Get-ChildItem -Path $utilsDir -Filter "*.ps1" -Recurse | Where-Object { 
-        $_.Name -notmatch '(?i)^setup\.ps1$' -and $_.FullName -notmatch '\\Debloat\\' -and $_.FullName -notmatch '\\AIO\\'
+        $_.Name -notmatch '(?i)^setup\.ps1$' -and $_.FullName -notmatch '\\Servicing\\'
     }
     foreach ($helper in $helperFiles) {
         try {
