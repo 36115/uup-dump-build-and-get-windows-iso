@@ -120,19 +120,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
   $needsServicing = [bool]$profileName -and ($resolvedProfile -notmatch '(?i)default$')
   if ($needsServicing -or $wimOnly) {
     Write-CleanLine "Locating distribution folder..."
-    $distDir = Get-ChildItem -Path $buildDirectory -Directory | Where-Object { 
-      (Test-Path (Join-Path $_.FullName "sources\install.wim")) -or (Test-Path (Join-Path $_.FullName "sources\install.esd"))
-    } | Select-Object -First 1 -ExpandProperty FullName
-
-    if (-not $distDir) {
-      if (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.wim")) {
-        $distDir = Join-Path $buildDirectory "ISOFOLDER"
-      } elseif (Test-Path (Join-Path $buildDirectory "ISOFOLDER\sources\install.esd")) {
-        $distDir = Join-Path $buildDirectory "ISOFOLDER"
-      } else {
-        throw "Could not locate distribution folder with sources\install.wim in $buildDirectory"
-      }
-    }
+    $distDir = Resolve-DistributionDirectory -BuildDirectory $buildDirectory
     Write-CleanLine "Distribution folder located: $distDir"
 
     $wimlibHelper = Join-Path $PSScriptRoot "Utils\WimLib\WimLib.ps1"
@@ -142,17 +130,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
       Write-CleanLine "wimlib-imagex detected: $wimlib"
     }
 
-    $installWim = Join-Path $distDir "sources\install.wim"
-    if (-not (Test-Path $installWim)) {
-      $installEsd = Join-Path $distDir "sources\install.esd"
-      if (Test-Path $installEsd) {
-        Write-CleanLine "Exporting install.esd to install.wim for servicing..."
-        ConvertTo-WindowsWim -SourcePath $installEsd -DestinationPath $installWim -WimLibPath $wimlib
-        Remove-Item $installEsd -Force
-      } else {
-        throw "Neither install.wim nor install.esd found in $distDir\sources"
-      }
-    }
+    $installWim = Resolve-ServicingWim -DistributionDirectory $distDir -WimLibPath $wimlib
 
     if ($needsServicing) {
       Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esd -wimOnly:$wimOnly -wimlib $wimlib -profileName $resolvedProfile
@@ -160,13 +138,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
 
     # If ESD was requested (and not wimOnly mode)
     if ($esd -and -not $wimOnly) {
-      $wimImages = @(Get-WindowsImage -ImagePath $installWim)
-      $imageCount = $wimImages.Count
-      Write-CleanLine "Converting install.wim ($imageCount index(es)) to install.esd..."
-      $installEsd = Join-Path $distDir "sources\install.esd"
-      if (Test-Path $installEsd) { Remove-Item $installEsd -Force }
-      ConvertTo-WindowsEsd -SourcePath $installWim -DestinationPath $installEsd -ImageCount $imageCount -WimLibPath $wimlib
-      Remove-Item $installWim -Force
+      ConvertTo-DistributionEsd -DistributionDirectory $distDir -InstallWim $installWim -WimLibPath $wimlib
     }
 
     # Clean SourceIso media and service boot.wim using New-BaseIsoMedia on uupdump's distribution folder
