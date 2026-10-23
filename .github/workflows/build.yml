@@ -203,6 +203,10 @@ jobs:
             echo "options=$opts"   >> $env:GITHUB_OUTPUT
           }
 
+      - name: Setup Environment
+        shell: pwsh
+        run: .\Build\Setup.ps1
+
       - name: Build Windows
         id: build_windows
         shell: pwsh

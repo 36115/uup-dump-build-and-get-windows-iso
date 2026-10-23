@@ -34,19 +34,13 @@ $loggingHelper = Join-Path $PSScriptRoot "Utils\Common\Logging.ps1"
 if (Test-Path $loggingHelper) { . $loggingHelper }
 
 # ------------------------------
-# Load Helpers
+# Initialize Environment & Helpers
 # ------------------------------
-$uupDumpHelper = Join-Path $PSScriptRoot "Utils\UUPDump\UUPDump.ps1"
-if (-not (Test-Path $uupDumpHelper)) {
-  $uupDumpHelper = Join-Path (Split-Path $PSScriptRoot -Parent) "Utils\UUPDump\UUPDump.ps1"
+$setupScript = Join-Path $PSScriptRoot "Build\Setup.ps1"
+if (-not (Test-Path $setupScript)) {
+  $setupScript = Join-Path (Split-Path $PSScriptRoot -Parent) "Build\Setup.ps1"
 }
-if (Test-Path $uupDumpHelper) { . $uupDumpHelper }
-
-$isoHelper = Join-Path $PSScriptRoot "Utils\ISO\Build-Iso.ps1"
-if (-not (Test-Path $isoHelper)) {
-  $isoHelper = Join-Path (Split-Path $PSScriptRoot -Parent) "Utils\ISO\Build-Iso.ps1"
-}
-if (Test-Path $isoHelper) { . $isoHelper }
+if (Test-Path $setupScript) { . $setupScript }
 
 # ------------------------------
 function Get-WindowsIso($name, $destinationDirectory) {
