@@ -34,7 +34,8 @@ $repoRoot = Get-RepoRoot $PSScriptRoot
 # Configure Windows Defender exclusions
 if ($IsWindows -or ($env:OS -like "*Windows*")) {
     Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-    Add-MpPreference -ExclusionPath $env:TEMP, "C:\output", "D:\output", "C:\a", "D:\a" -ErrorAction SilentlyContinue
+    $outDir = Join-Path $repoRoot "Out"
+    Add-MpPreference -ExclusionPath $env:TEMP, $outDir, "C:\a", "D:\a" -ErrorAction SilentlyContinue
 }
 
 # 2. Dot-source all utility helper scripts in Utils/
