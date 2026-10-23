@@ -230,13 +230,25 @@ function Patch-Aria2-Flags {
   [System.IO.File]::WriteAllBytes($CmdPath, $newBytes)
 }
 
-function Get-EditionName([string]$e) {
+function Get-EditionInfo([string]$e) {
   switch ($e.ToLower()) {
-    "core"  { "Core" }
-    "home"  { "Core" }
-    "multi" { "Multi" }
-    default { "Professional" }
+    { $_ -in "core", "home" }                                           { [PSCustomObject]@{ Base = "Core"; Virtual = $null; Short = "Home"; Fancy = "Windows Home" } }
+    { $_ -in "homesinglelanguage", "coresinglelanguage", "homesl" }     { [PSCustomObject]@{ Base = "Core"; Virtual = "CoreSingleLanguage"; Short = "HomeSL"; Fancy = "Windows Home Single Language" } }
+    { $_ -in "pro", "professional" }                                    { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = "Pro"; Fancy = "Windows Pro" } }
+    { $_ -in "professionalworkstation", "proworkstation" }              { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalWorkstation"; Short = "ProWorkstation"; Fancy = "Windows Pro for Workstations" } }
+    { $_ -in "professionaleducation", "proeducation" }                  { [PSCustomObject]@{ Base = "Professional"; Virtual = "ProfessionalEducation"; Short = "ProEducation"; Fancy = "Windows Pro Education" } }
+    "education"                                                         { [PSCustomObject]@{ Base = "Professional"; Virtual = "Education"; Short = "Education"; Fancy = "Windows Education" } }
+    "enterprise"                                                        { [PSCustomObject]@{ Base = "Professional"; Virtual = "Enterprise"; Short = "Enterprise"; Fancy = "Windows Enterprise" } }
+    "iotenterprise"                                                     { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterprise"; Short = "IoTEnterprise"; Fancy = "Windows IoT Enterprise" } }
+    "iotenterprisek"                                                    { [PSCustomObject]@{ Base = "Professional"; Virtual = "IoTEnterpriseK"; Short = "IoTEnterpriseK"; Fancy = "Windows IoT Enterprise K" } }
+    "serverrdsh"                                                        { [PSCustomObject]@{ Base = "Professional"; Virtual = "ServerRdsh"; Short = "ServerRdsh"; Fancy = "Windows Enterprise multi-session" } }
+    "multi"                                                             { [PSCustomObject]@{ Base = "Multi"; Virtual = $null; Short = "Multi"; Fancy = "Windows Multi-Edition" } }
+    default                                                             { [PSCustomObject]@{ Base = "Professional"; Virtual = $null; Short = $e; Fancy = "Windows $e" } }
   }
+}
+
+function Get-EditionName([string]$e) {
+  return (Get-EditionInfo $e).Base
 }
 
 function Get-UupPackageZip {
