@@ -1,0 +1,46 @@
+﻿Windows Registry Editor Version 5.00
+
+; Windows 10 Specific Registry Tweaks
+
+; Hide Control Panel Page (Windows 10)
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowCPL]
+"3"="BitLocker Drive Encryption"
+"12"="Credential Manager"
+
+; Hide Windows Settings Pages (including Windows Defender and auxiliary items)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"SettingsPageVisibility"="hide:windowsdefender;deviceencryption;mobile-devices;nfctransactions;gaming-gamebar;gaming-gamedvr;gaming-broadcasting;gaming-gamemode;gaming-xboxnetworking;holographic-audio;privacy-holographic-environment;holographic-headset;holographic-management;cortana-moredetails;cortana-language;cortana-notifications;cortana-permissions;cortana;cortana-talktocortana;gaming-trueplay;findmydevice"
+
+; Disable Windows for Install Driver
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata]
+"PreventDeviceMetadataFromNetwork"=dword:00000001
+
+; Disable Website Access of Language List
+[HKEY_CURRENT_USER\Control Panel\International\User Profile]
+"HttpAcceptLanguageOptOut"=dword:00000001
+
+; Remove Quick Access from Navigation Pane (Windows 10)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer]
+"HubMode"=dword:00000001
+
+; Show Search Icon on Taskbar (Windows 10)
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search]
+"SearchboxTaskbarMode"=dword:00000001
+"TraySearchBoxVisible"=dword:00000000
+"TraySearchBoxVisibleOnAnyMonitor"=dword:00000000
+"OnboardSearchboxOnTaskbar"=dword:00000002
+"SearchboxTaskbarModePrevious"=dword:00000002
+
+; Disable 3D Objects Folder (Windows 10)
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}]
+
+; Disable 3D Objects Folder (Windows 10) - 32-bit
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}]
+
+; Disable Meet Now Icon (Windows 10)
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"HideSCAMeetNow"=dword:00000001
+
+; Disable Timeline (Windows 10)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System]
+"EnableActivityFeed"=dword:00000000
