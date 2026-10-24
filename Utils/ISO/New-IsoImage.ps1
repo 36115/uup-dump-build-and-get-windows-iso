@@ -1178,6 +1178,21 @@ function Sync-ServicedImageToMedia {
     } elseif (Test-Path $servicedWim) {
         Copy-Item -Path $servicedWim -Destination (Join-Path $targetSources "install.wim") -Force
     }
+
+    # Ensure multi-index images display the edition selection screen in Windows Setup
+    $finalImg = if (Test-Path (Join-Path $targetSources "install.esd")) {
+        Join-Path $targetSources "install.esd"
+    } elseif (Test-Path (Join-Path $targetSources "install.wim")) {
+        Join-Path $targetSources "install.wim"
+    } else { $null }
+
+    if ($finalImg) {
+        $imgCount = @(Get-WindowsImage -ImagePath $finalImg).Count
+        if ($imgCount -gt 1) {
+            $eiCfg = Join-Path $targetSources "ei.cfg"
+            Set-Content -Path $eiCfg -Value "[Channel]`r`nRetail`r`n[VL]`r`n0`r`n" -Encoding ASCII -Force
+        }
+    }
 }
 
 function Resolve-TargetDirectory {
