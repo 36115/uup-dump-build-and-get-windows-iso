@@ -28,6 +28,7 @@ if (Test-Path $inboxApps) {
     Write-Info "Windows\InboxApps already absent."
 }
 
+
 Write-Step "Purging OneDrive Setup Binaries and Decoupling Shell Namespace..."
 $oneDriveBinaries = @(
     "$MountDir\Windows\System32\OneDriveSetup.exe",
@@ -43,6 +44,7 @@ foreach ($bin in $oneDriveBinaries) {
 
 $oneDriveDirs = @(
     "$MountDir\Windows\System32\OneDrive.Setup"
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\OneDrive"
 )
 foreach ($dir in $oneDriveDirs) {
     if (Test-Path $dir) {
@@ -91,6 +93,7 @@ $capPatterns = @(
     "Hello.Face*"
 )
 Remove-OfflineCapability -MountDir $MountDir -Pattern $capPatterns
+
 $wmpDirs = @(
     "$MountDir\Program Files\Windows Media Player",
     "$MountDir\Program Files (x86)\Windows Media Player"
