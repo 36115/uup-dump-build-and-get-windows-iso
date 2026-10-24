@@ -31,6 +31,12 @@
         'Microsoft.XboxIdentityProvider'
     )
 
+    # Windows Defender build configuration:
+    #   'Both'   - Exports 2 editions into the ISO: "<Edition>" (no Defender) and "<Edition> (With Defender)"
+    #   'Remove' - Purges Windows Defender, SecurityHealth, and SmartScreen (1 edition)
+    #   'Keep'   - Preserves Windows Defender, SecurityHealth, and SmartScreen (1 edition)
+    DefenderBuild = 'Both'
+
     # Force remove all framework dependencies (Microsoft.VCLibs, Microsoft.UI.Xaml, .NET.Native)
     # WARNING: Enabling this will break the remaining Store apps above because they depend on these runtimes.
     # Only enable if EnabledApps is empty (@()) and you want a 100% headless/legacy win32-only OS.

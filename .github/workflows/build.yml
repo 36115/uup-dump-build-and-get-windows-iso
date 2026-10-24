@@ -12,6 +12,7 @@ run-name: >
     "Ukrainian (Ukraine)":"uk-UA","Chinese (Simplified, China)":"zh-CN","Chinese (Traditional, Taiwan)":"zh-TW"
   }')[inputs.language] }})
   ${{ inputs.profile_name && format('- {0}', inputs.profile_name) || '' }}
+  ${{ inputs.defender_build == 'Both' && '[Defender: Both]' || inputs.defender_build == 'Remove' && '[Defender: Remove]' || inputs.defender_build == 'Keep' && '[Defender: Keep]' || '' }}
   ${{ inputs.esd && '[ESD]' || '' }}
   ${{ inputs.drivers && '[Drivers]' || '' }}
   ${{ inputs.netfx3 && '[NetFx3]' || '' }}
@@ -181,6 +182,15 @@ on:
         type: string
         required: false
         default: ""
+      defender_build:
+        description: "Windows Defender build mode"
+        type: choice
+        options:
+          - Both
+          - Remove
+          - Keep
+        default: Both
+        required: true
 
 permissions:
   contents: write
@@ -264,6 +274,13 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if ('${{ inputs.defender_build }}' -eq 'Both') {
+            $opts += ' -defenderBuild Both -separateDefenderEditions'
+          } elseif ('${{ inputs.defender_build }}' -eq 'Remove') {
+            $opts += ' -defenderBuild Remove -separateDefenderEditions:$false'
+          } elseif ('${{ inputs.defender_build }}' -eq 'Keep') {
+            $opts += ' -defenderBuild Keep -separateDefenderEditions:$false'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
             $opts += ' -profileName "${{ inputs.profile_name }}"'
           }
@@ -286,7 +303,7 @@ jobs:
         id: build_windows
         shell: pwsh
         run: |
-          pwsh uup-dump-get-windows-iso.ps1 ${{ steps.map.outputs.version }} Out -architecture ${{ inputs.architecture }} -edition ${{ inputs.edition }} -lang ${{ steps.map.outputs.lang }} ${{ steps.map.outputs.options }}
+          pwsh Build-Iso.ps1 ${{ steps.map.outputs.version }} Out -architecture ${{ inputs.architecture }} -edition ${{ inputs.edition }} -lang ${{ steps.map.outputs.lang }} ${{ steps.map.outputs.options }}
           echo "iso_name=$env:ISO_NAME" >> $env:GITHUB_OUTPUT
 
       - name: Create split zip
@@ -350,9 +367,10 @@ jobs:
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
             # map short flags to full descriptions from workflow inputs
             $descMap = @{
-              '-esd'     = 'Use ESD compression'
-              '-drivers' = 'Add additional drivers'
-              '-netfx3'  = 'Add .NET Framework 3.5'
+              '-esd'                       = 'Use ESD compression'
+              '-drivers'                   = 'Add additional drivers'
+              '-netfx3'                    = 'Add .NET Framework 3.5'
+              '-separatedefendereditions'  = 'Separate Defender editions'
             }
             # split -> normalize -> map -> deduplicate
             $items = $opts -split '\s+' |
@@ -533,6 +551,13 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if ('${{ inputs.defender_build }}' -eq 'Both') {
+            $opts += ' -defenderBuild Both -separateDefenderEditions'
+          } elseif ('${{ inputs.defender_build }}' -eq 'Remove') {
+            $opts += ' -defenderBuild Remove -separateDefenderEditions:$false'
+          } elseif ('${{ inputs.defender_build }}' -eq 'Keep') {
+            $opts += ' -defenderBuild Keep -separateDefenderEditions:$false'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
             $opts += ' -profileName "${{ inputs.profile_name }}"'
           }
@@ -594,7 +619,7 @@ jobs:
       - name: Build Edition WIM
         shell: pwsh
         run: |
-          pwsh uup-dump-get-windows-iso.ps1 ${{ needs.prepare_aio.outputs.version }} Out -architecture ${{ inputs.architecture }} -edition ${{ matrix.edition }} -lang ${{ needs.prepare_aio.outputs.lang }} ${{ needs.prepare_aio.outputs.options }} -wimOnly
+          pwsh Build-Iso.ps1 ${{ needs.prepare_aio.outputs.version }} Out -architecture ${{ inputs.architecture }} -edition ${{ matrix.edition }} -lang ${{ needs.prepare_aio.outputs.lang }} ${{ needs.prepare_aio.outputs.options }} -wimOnly
 
       - name: Upload Edition WIM Artifact
         uses: actions/upload-artifact@v7.0.1
@@ -703,9 +728,10 @@ jobs:
           $optsRow = $null
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
             $descMap = @{
-              '-esd'     = 'Use ESD compression'
-              '-drivers' = 'Add additional drivers'
-              '-netfx3'  = 'Add .NET Framework 3.5'
+              '-esd'                       = 'Use ESD compression'
+              '-drivers'                   = 'Add additional drivers'
+              '-netfx3'                    = 'Add .NET Framework 3.5'
+              '-separatedefendereditions'  = 'Separate Defender editions'
             }
             $items = $opts -split '\s+' |
               Where-Object { $_ -and $_.Trim() -ne '' } |
