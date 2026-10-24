@@ -23,6 +23,14 @@
         vDeleteSource = 1
     }
 
+    # Whitelisted provisioned Modern Store apps to retain
+    EnabledApps = @(
+        'Microsoft.WindowsStore',
+        'Microsoft.StorePurchaseApp',
+        'Microsoft.DesktopAppInstaller',
+        'Microsoft.XboxIdentityProvider'
+    )
+
     # Universal and version-specific registry files (dynamically evaluated using exposed $targetOS number e.g. 10 or 11)
     RegistryFiles = @(
         'OS/Registry/Common.reg'
