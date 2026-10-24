@@ -1,21 +1,19 @@
 name: Build Windows
 run-name: >
   ${{ inputs.versions }}
-  ${{ fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI"}')[inputs.edition] }}
-  ${{ fromJSON('{"x64":"X64","arm64":"ARM64"}')[inputs.architecture] }}
-  ${{ fromJSON('{
-    "Arabic (Saudi Arabia)":"AR","Bulgarian (Bulgaria)":"BG","Czech (Czech Republic)":"CS","Danish (Denmark)":"DA","German (Germany)":"DE","Greek (Greece)":"EL",
-    "English (United Kingdom)":"EN","English (United States)":"EN","Spanish (Spain)":"ES","Spanish (Mexico)":"ES","Estonian (Estonia)":"ET","Finnish (Finland)":"FI",
-    "French (Canada)":"FR","French (France)":"FR","Hebrew (Israel)":"HE","Croatian (Croatia)":"HR","Hungarian (Hungary)":"HU","Italian (Italy)":"IT",
-    "Japanese (Japan)":"JA","Korean (Korea)":"KO","Lithuanian (Lithuania)":"LT","Latvian (Latvia)":"LV","Norwegian Bokmål (Norway)":"NB",
-    "Dutch (Netherlands)":"NL","Polish (Poland)":"PL","Portuguese (Brazil)":"PT","Portuguese (Portugal)":"PT","Romanian (Romania)":"RO","Russian (Russia)":"RU",
-    "Slovak (Slovakia)":"SK","Slovenian (Slovenia)":"SL","Serbian (Latin, Serbia)":"SR","Swedish (Sweden)":"SV","Thai (Thailand)":"TH","Turkish (Turkey)":"TR",
-    "Ukrainian (Ukraine)":"UK","Chinese (Simplified, China)":"ZH","Chinese (Traditional, Taiwan)":"ZH"
-  }')[inputs.language] }}
-  ${{ inputs.esd && 'ESD' || '' }}
-  ${{ inputs.drivers && 'DRIVERS' || '' }}
-  ${{ inputs.netfx3 && 'NETFX3' || '' }}
-
+  ${{ fromJSON('{"Pro":"Pro","Home":"Home","Multi":"Multi"}')[inputs.edition] || inputs.edition }}
+  (${{ inputs.architecture }}, ${{ fromJSON('{
+    "Arabic (Saudi Arabia)":"ar-SA","Bulgarian (Bulgaria)":"bg-BG","Czech (Czech Republic)":"cs-CZ","Danish (Denmark)":"da-DK","German (Germany)":"de-DE","Greek (Greece)":"el-GR",
+    "English (United Kingdom)":"en-GB","English (United States)":"en-US","Spanish (Spain)":"es-ES","Spanish (Mexico)":"es-MX","Estonian (Estonia)":"et-EE","Finnish (Finland)":"fi-FI",
+    "French (Canada)":"fr-CA","French (France)":"fr-FR","Hebrew (Israel)":"he-IL","Croatian (Croatia)":"hr-HR","Hungarian (Hungary)":"hu-HU","Italian (Italy)":"it-IT",
+    "Japanese (Japan)":"ja-JP","Korean (Korea)":"ko-KR","Lithuanian (Lithuania)":"lt-LT","Latvian (Latvia)":"lv-LV","Norwegian Bokmål (Norway)":"nb-NO",
+    "Dutch (Netherlands)":"nl-NL","Polish (Poland)":"pl-PL","Portuguese (Brazil)":"pt-BR","Portuguese (Portugal)":"pt-PT","Romanian (Romania)":"ro-RO","Russian (Russia)":"ru-RU",
+    "Slovak (Slovakia)":"sk-SK","Slovenian (Slovenia)":"sl-SI","Serbian (Latin, Serbia)":"sr-Latn-RS","Swedish (Sweden)":"sv-SE","Thai (Thailand)":"th-TH","Turkish (Turkey)":"tr-TR",
+    "Ukrainian (Ukraine)":"uk-UA","Chinese (Simplified, China)":"zh-CN","Chinese (Traditional, Taiwan)":"zh-TW"
+  }')[inputs.language] }})
+  ${{ inputs.esd && '[ESD]' || '' }}
+  ${{ inputs.drivers && '[Drivers]' || '' }}
+  ${{ inputs.netfx3 && '[NetFx3]' || '' }}
 on:
   workflow_dispatch:
     inputs:
@@ -319,7 +317,7 @@ jobs:
           echo "title=$($iso.title)" >> $env:GITHUB_ENV
           echo "images=$($finalImageName)" >> $env:GITHUB_ENV
           echo "iso_checksum=$($iso.checksum)" >> $env:GITHUB_ENV
-          echo "tagname=$($iso.build).$($iso.version).${{ fromJSON('{"Pro":"PRO","Home":"HOME","Multi":"MULTI"}')[inputs.edition] }}.${{ fromJSON('{"x64":"X64","arm64":"ARM64"}')[inputs.architecture] }}.${{ fromJSON('{"ar-sa":"AR","bg-bg":"BG","cs-cz":"CS","da-dk":"DA","de-de":"DE","el-gr":"EL","en-gb":"EN","en-us":"EN","es-es":"ES","es-mx":"ES","et-ee":"ET","fi-fi":"FI","fr-ca":"FR","fr-fr":"FR","he-il":"HE","hr-hr":"HR","hu-hu":"HU","it-it":"IT","ja-jp":"JA","ko-kr":"KO","lt-lt":"LT","lv-lv":"LV","nb-no":"NB","nl-nl":"NL","pl-pl":"PL","pt-br":"PT","pt-pt":"PT","ro-ro":"RO","ru-ru":"RU","sk-sk":"SK","sl-si":"SL","sr-latn-rs":"SR","sv-se":"SV","th-th":"TH","tr-tr":"TR","uk-ua":"UK","zh-cn":"ZH","zh-tw":"ZH"}')[steps.map.outputs.lang] }}$($iso.tags)" >> $env:GITHUB_ENV
+          echo "tagname=$($iso.build).$($iso.version).${{ fromJSON('{"Pro":"Pro","Home":"Home","Multi":"Multi"}')[inputs.edition] || inputs.edition }}.${{ inputs.architecture }}.${{ steps.map.outputs.lang }}$($iso.tags)" >> $env:GITHUB_ENV
 
       - name: Create Release
         id: create_release

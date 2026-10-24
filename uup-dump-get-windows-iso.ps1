@@ -166,19 +166,19 @@ function Get-UupDumpIso($name, $target) {
             if ($_.Value.title -match '\.NET Framework') {
                         Write-CleanLine "Skipping, ignore .NET Framework update."
                         return $false
-                }
+        }
             if ($_.Value.title -match 'Windows CPC OS') {
                         Write-CleanLine "Skipping, ignore Windows CPC OS."
                         return $false
-                }
+        }
             if (!$preview) {
-                $ok = ($target.search -like '*preview*') -or ($_.Value.title -notlike '*preview*')
-                if (-not $ok) {
+        $ok = ($target.search -like '*preview*') -or ($_.Value.title -notlike '*preview*')
+        if (-not $ok) {
                     Write-CleanLine "Skipping.
                     L1: Expected preview=false.
                     L2: Got preview=true."
-                }
-                return $ok
+        }
+        return $ok
             }
             $true
         }
@@ -187,20 +187,20 @@ function Get-UupDumpIso($name, $target) {
             Write-CleanLine "Getting the $name $id langs metadata"
             $result = Invoke-UupDumpApi listlangs @{ id = $id }
             if ($result.response.updateInfo.build -ne $_.Value.build) {
-                throw 'for some reason listlangs returned an unexpected build'
+        throw 'for some reason listlangs returned an unexpected build'
             }
             $_.Value | Add-Member -NotePropertyMembers @{ langs = $result.response.langFancyNames; info = $result.response.updateInfo }
 
             $langs = $_.Value.langs.PSObject.Properties.Name
             $eds = if ($langs -contains $lang) {
-                Write-CleanLine "Getting the $name $id editions metadata"
-                $result = Invoke-UupDumpApi listeditions @{ id = $id; lang = $lang }
-                $result.response.editionFancyNames
+        Write-CleanLine "Getting the $name $id editions metadata"
+        $result = Invoke-UupDumpApi listeditions @{ id = $id; lang = $lang }
+        $result.response.editionFancyNames
             } else {
-                Write-CleanLine "Skipping.
-                L3: Expected langs=$lang.
-                L4: Got langs=$($langs -join ',')."
-                [PSCustomObject]@{}
+        Write-CleanLine "Skipping.
+        L3: Expected langs=$lang.
+        L4: Got langs=$($langs -join ',')."
+        [PSCustomObject]@{}
             }
             $_.Value | Add-Member -NotePropertyMembers @{ editions = $eds }
             $_
@@ -211,40 +211,40 @@ function Get-UupDumpIso($name, $target) {
             $res = $true
 
             if ($ringLower) {
-                $actual = ($_.Value.info.ring).ToUpper()
-                $allowedRings = switch ($ringLower) {
+        $actual = ($_.Value.info.ring).ToUpper()
+        $allowedRings = switch ($ringLower) {
                     'canary' { 'CANARY', 'WIF' }
                     'dev'    { 'DEV', 'WIF', 'WIS' }
                     'beta'   { 'BETA', 'WIF', 'WIS' }
                     default { $ringLower.ToUpper() }
-                }
+        }
 
-                if ($actual -notin $allowedRings) {
+        if ($actual -notin $allowedRings) {
                     Write-CleanLine "Skipping. Expected ring: $($allowedRings -join ', '). Got ring=$actual."
                     $res = $false
-                }
+        }
             }
 
             if ($langs -notcontains $lang) {
-                Write-CleanLine "Skipping. Expected langs=$lang. Got langs=$($langs -join ',')."
-                $res = $false
+        Write-CleanLine "Skipping. Expected langs=$lang. Got langs=$($langs -join ',')."
+        $res = $false
             }
 
             if ((Get-EditionName $edition) -eq "Multi") {
-                if (($editions -notcontains "Professional") -and ($editions -notcontains "Core")) {
+        if (($editions -notcontains "Professional") -and ($editions -notcontains "Core")) {
                     Write-CleanLine "Skipping.
                     L6: Expected editions=Multi (Professional/Core). Got editions=$($editions -join ',')."
                     $res = $false
-                }
+        }
             } elseif ($editions -notcontains (Get-EditionName $edition)) {
-                Write-CleanLine ("Skipping. Expected editions={0}.
-                L7: Got editions={1}." -f (Get-EditionName $edition), ($editions -join ','))
-                $res = $false
+        Write-CleanLine ("Skipping. Expected editions={0}.
+        L7: Got editions={1}." -f (Get-EditionName $edition), ($editions -join ','))
+        $res = $false
             }
 
             if (!$preview -and -not ($_.Value.title -match 'version')) {
-                Write-CleanLine "Skipping. Unexpected title format: missing 'version'."
-                $res = $false
+        Write-CleanLine "Skipping. Unexpected title format: missing 'version'."
+        $res = $false
             }
 
             $res
@@ -253,15 +253,15 @@ function Get-UupDumpIso($name, $target) {
     | ForEach-Object {
             $id = $_.Value.uuid
             [PSCustomObject]@{
-                name               = $name
-                title              = $_.Value.title
-                build              = $_.Value.build
-                id                 = $id
-                edition            = $target.edition
-                virtualEdition     = $target['virtualEdition']
-                apiUrl             = 'https://api.uupdump.net/get.php?' + (New-QueryString @{ id = $id; lang = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
-                downloadUrl        = 'https://uupdump.net/download.php?' + (New-QueryString @{ id = $id; pack = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
-                downloadPackageUrl = 'https://uupdump.net/get.php?' + (New-QueryString @{ id = $id; pack = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
+        name               = $name
+        title              = $_.Value.title
+        build              = $_.Value.build
+        id                 = $id
+        edition            = $target.edition
+        virtualEdition     = $target['virtualEdition']
+        apiUrl             = 'https://api.uupdump.net/get.php?' + (New-QueryString @{ id = $id; lang = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
+        downloadUrl        = 'https://uupdump.net/download.php?' + (New-QueryString @{ id = $id; pack = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
+        downloadPackageUrl = 'https://uupdump.net/get.php?' + (New-QueryString @{ id = $id; pack = $lang; edition = if ($edition -eq "multi") { "core;professional" } else { $target.edition } })
             }
         }
 }
@@ -399,20 +399,20 @@ function Get-WindowsIso($name, $destinationDirectory) {
         powershell cmd /c uup_download_windows.cmd 2>&1 |
             Tee-Object -FilePath $rawLog |
             ForEach-Object {
-                $raw = [string]$_
-                if ([string]::IsNullOrEmpty($raw)) { return }
-                foreach ($crChunk in ($raw -split "`r")) {
+        $raw = [string]$_
+        if ([string]::IsNullOrEmpty($raw)) { return }
+        foreach ($crChunk in ($raw -split "`r")) {
                     foreach ($line in ($crChunk -split "`n")) {
                         if ($line -eq $null) { continue }
                         # DISM progress buckets; aria2 is not parsed here
                         if (-not (Process-ProgressLine $line)) {
                             if ($line -match '^\s*(Mounting image|Saving image|Applying image|Exporting image|Unmounting image|Deployment Image Servicing and Management tool|^=== )') {
-                                Reset-ProgressSession
+    Reset-ProgressSession
                             }
                             Write-CleanLine $line
                         }
                     }
-                }
+        }
             }
     }
 
@@ -442,10 +442,10 @@ function Get-WindowsIso($name, $destinationDirectory) {
             checksum = $isoChecksum
             images  = @($windowsImages)
             uupDump = @{
-                id                 = $iso.id
-                apiUrl             = $iso.apiUrl
-                downloadUrl        = $iso.downloadUrl
-                downloadPackageUrl = $iso.downloadPackageUrl
+        id                 = $iso.id
+        apiUrl             = $iso.apiUrl
+        downloadUrl        = $iso.downloadUrl
+        downloadPackageUrl = $iso.downloadPackageUrl
             }
         } | ConvertTo-Json -Depth 99) -replace '\\u0026','&'
     )
