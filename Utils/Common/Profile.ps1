@@ -392,3 +392,41 @@ function Get-ProfileIsoNameFormat {
     }
     return "{TargetName}-{Edition}-{Version}"
 }
+
+function Get-ProfileEnabledApps {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    $removeDefender = if (Get-Command Get-ProfileRemoveDefender -ErrorAction SilentlyContinue) {
+        Get-ProfileRemoveDefender -ProfileChain $ProfileChain
+    } else {
+        $false
+    }
+
+    $apps = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in $ProfileChain) {
+        $cfg = $item.Config
+        if ($cfg.ContainsKey('EnabledApps') -and $cfg.EnabledApps) {
+            foreach ($app in $cfg.EnabledApps) {
+                if ($removeDefender -and ($app -like '*SecHealthUI*' -or $app -eq 'Microsoft.SecHealthUI')) {
+                    continue
+                }
+                if ($app -and -not $apps.Contains($app)) {
+                    $apps.Add($app)
+                }
+            }
+        }
+    }
+
+    if (-not $removeDefender -and $apps.Count -gt 0) {
+        if (-not $apps.Contains('Microsoft.SecHealthUI')) {
+            $apps.Add('Microsoft.SecHealthUI')
+        }
+    }
+
+    return $apps.ToArray()
+}

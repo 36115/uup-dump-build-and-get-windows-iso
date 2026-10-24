@@ -737,6 +737,90 @@ function New-FileShortcut {
     }
 }
 
+function Filter-OfflineProvisionedAppxPackages {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$EnabledApps = @(),
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$ProtectedFrameworks = @(
+            'Microsoft.VCLibs*',
+            'Microsoft.UI.Xaml*',
+            'Microsoft.NET.Native.Framework*',
+            'Microsoft.NET.Native.Runtime*',
+            'Microsoft.Services.Store.Engagement*',
+            'Microsoft.WindowsAppRuntime*'
+        )
+    )
+
+    if (-not $EnabledApps -or $EnabledApps.Count -eq 0) {
+        if (Get-Command Get-ProfileEnabledApps -ErrorAction SilentlyContinue -and (Test-Path variable:profileChain) -and $profileChain) {
+            $EnabledApps = Get-ProfileEnabledApps -ProfileChain $profileChain
+        } elseif ((Test-Path variable:ProfileDir) -and $ProfileDir -and (Test-Path (Join-Path $ProfileDir "profile.psd1"))) {
+            $cfg = Import-PowerShellDataFile -Path (Join-Path $ProfileDir "profile.psd1")
+            if ($cfg.ContainsKey('EnabledApps') -and $cfg.EnabledApps) {
+                $EnabledApps = $cfg.EnabledApps
+            }
+        }
+    }
+
+    if (-not $EnabledApps -or $EnabledApps.Count -eq 0) {
+        $EnabledApps = @(
+            'Microsoft.WindowsStore',
+            'Microsoft.StorePurchaseApp',
+            'Microsoft.SecHealthUI',
+            'Microsoft.DesktopAppInstaller',
+            'Microsoft.XboxIdentityProvider'
+        )
+    }
+
+    try {
+        $provPackages = @(Get-AppxProvisionedPackage -Path $MountDir -ErrorAction SilentlyContinue)
+        $removedCount = 0
+        $retainedCount = 0
+
+        foreach ($pkg in $provPackages) {
+            $isFramework = $false
+            foreach ($fw in $ProtectedFrameworks) {
+                if ($pkg.DisplayName -like $fw -or $pkg.PackageName -like $fw) {
+                    $isFramework = $true
+                    break
+                }
+            }
+            if ($isFramework) {
+                $retainedCount++
+                continue
+            }
+
+            $isAllowed = $false
+            foreach ($app in $EnabledApps) {
+                if ($pkg.DisplayName -like "$app*" -or $pkg.PackageName -like "$app*") {
+                    $isAllowed = $true
+                    break
+                }
+            }
+
+            if ($isAllowed) {
+                Write-Info "Retaining provisioned app: $($pkg.DisplayName)"
+                $retainedCount++
+            } else {
+                Write-Info "Removing provisioned app: $($pkg.DisplayName)..."
+                if (Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -PackageName $pkg.PackageName) {
+                    $removedCount++
+                }
+            }
+        }
+
+        Write-Success "Provisioned apps filtered: $retainedCount retained, $removedCount removed."
+    } catch {
+        Write-Warning "Provisioned Appx filtering issue: $_"
+    }
+}
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------

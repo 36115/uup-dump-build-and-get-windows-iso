@@ -114,6 +114,16 @@ function Get-WindowsIso($name, $destinationDirectory) {
   $profileIsoTag = if ($profileChain -and (Get-Command Get-ProfileIsoTag -ErrorAction SilentlyContinue)) { Get-ProfileIsoTag -ProfileChain $profileChain } else { "" }
   if ($profileIsoTag) { $tag += $profileIsoTag }
 
+  # Patch CustomAppsList.txt if profile hierarchy specifies EnabledApps
+  $enabledApps = if ($profileChain -and (Get-Command Get-ProfileEnabledApps -ErrorAction SilentlyContinue)) {
+    Get-ProfileEnabledApps -ProfileChain $profileChain
+  } else {
+    @()
+  }
+  if ($enabledApps -and $enabledApps.Count -gt 0 -and (Get-Command Set-UupCustomAppsList -ErrorAction SilentlyContinue)) {
+    Set-UupCustomAppsList -BuildDirectory $buildDirectory -EnabledApps $enabledApps
+  }
+
   Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
   Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
 
