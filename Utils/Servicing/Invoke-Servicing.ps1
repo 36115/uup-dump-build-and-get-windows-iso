@@ -35,7 +35,10 @@ param(
     [string]$ScriptsDir = "",
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipCleanup
+    [switch]$SkipCleanup,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$ForceRemoveDefender
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +56,10 @@ function Write-Info([string]$msg) {
 }
 
 # Resolve paths
+if ($ForceRemoveDefender) {
+    $env:FORCE_REMOVE_DEFENDER = 'true'
+}
+
 $MountDir = (Resolve-Path $MountDir).Path
 if (-not (Test-Path "$MountDir\Windows\System32")) {
     throw "Invalid MountDir: '$MountDir' does not appear to be a mounted Windows image."
@@ -1126,7 +1133,15 @@ try {
     if ($profileScripts.Count -gt 0) {
         foreach ($s in $profileScripts) {
             Write-Step "Executing Profile Script: $(Split-Path $s -Leaf)..."
-            . $s -MountDir $MountDir -CustomRegPath $CustomRegPath -NSudoPath $NSudoPath
+            $scriptArgs = @{
+                MountDir      = $MountDir
+                CustomRegPath = $CustomRegPath
+                NSudoPath     = $NSudoPath
+            }
+            if ($ForceRemoveDefender -and ($s -match 'Remove-DefenderAndSmartScreen\.ps1')) {
+                $scriptArgs['RemoveDefender'] = $true
+            }
+            . $s @scriptArgs
         }
     } elseif ($ScriptsDir -and (Test-Path $ScriptsDir)) {
         $searchDirs = @(
@@ -1151,6 +1166,9 @@ try {
 }
 finally {
     Dismount-OfflineRegistryHives
+    if ($ForceRemoveDefender) {
+        Remove-Item env:FORCE_REMOVE_DEFENDER -ErrorAction SilentlyContinue
+    }
 }
 
 # -------------------------------------------------------------
