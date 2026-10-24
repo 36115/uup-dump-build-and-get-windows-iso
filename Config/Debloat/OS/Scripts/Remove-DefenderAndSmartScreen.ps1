@@ -23,7 +23,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if (-not $PSBoundParameters.ContainsKey('RemoveDefender')) {
-    if (Get-Command Get-ProfileRemoveDefender -ErrorAction SilentlyContinue -and (Test-Path variable:profileChain) -and $profileChain) {
+    if ($env:FORCE_REMOVE_DEFENDER -eq 'true') {
+        $RemoveDefender = $true
+    } elseif (Get-Command Get-ProfileRemoveDefender -ErrorAction SilentlyContinue -and (Test-Path variable:profileChain) -and $profileChain) {
         $RemoveDefender = Get-ProfileRemoveDefender -ProfileChain $profileChain
     } elseif ((Test-Path variable:ProfileDir) -and $ProfileDir -and (Test-Path (Join-Path $ProfileDir "profile.psd1"))) {
         $cfg = if (Get-Command Import-ProfileManifest -ErrorAction SilentlyContinue) {
