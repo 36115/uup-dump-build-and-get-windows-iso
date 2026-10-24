@@ -86,6 +86,7 @@ function Invoke-ImageServicing {
         [string]$wimlib = "",
         [string]$profileName = "",
         [string]$RepoRoot = "",
+        [switch]$separateDefenderEditions,
 
         # Legacy parameters for backward compatibility with 2239d3f/5cd021a
         [string]$buildDirectory = "",
@@ -147,6 +148,17 @@ function Invoke-ImageServicing {
             Join-Path $RepoRoot "Config\$targetProfile"
         }
 
+        $profileChain = if ($profileDir -and (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
+            Get-ProfileHierarchy -ProfileDir $profileDir -RepoRoot $RepoRoot -OsFamily $osFamily
+        } else {
+            @()
+        }
+
+        $isSeparateDefender = $separateDefenderEditions.IsPresent
+        if (-not $isSeparateDefender -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
+            $isSeparateDefender = Get-ProfileSeparateDefenderEditions -ProfileChain $profileChain
+        }
+
         $mountDir = Join-Path $env:TEMP "Mount_Servicing_$([System.IO.Path]::GetRandomFileName())"
         Mount-WindowsImageIndex -ImagePath $installWim -Index $idx -MountDir $mountDir
         $isMounted = $true
@@ -170,14 +182,69 @@ function Invoke-ImageServicing {
                 Dismount-WindowsImageIndex -MountDir $mountDir -Discard
             }
         }
+
+        if ($isSeparateDefender) {
+            $defName = if ($currentImageName -match '\(Defender\)') { $currentImageName } else { "$currentImageName (Defender)" }
+            $defDesc = "$currentImageName with Windows Defender"
+            $noDefName = if ($currentImageName -match '\(Defender\)') { $currentImageName -replace '\(Defender\)', '(No Defender)' } else { "$currentImageName (No Defender)" }
+            $noDefDesc = "$currentImageName without Windows Defender"
+
+            if (Get-Command Set-WimImageInfo -ErrorAction SilentlyContinue) {
+                Set-WimImageInfo -ImagePath $installWim -Index $idx -NewName $defName -NewDescription $defDesc -WimLibPath $wimlib
+            }
+
+            if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+                Write-CleanLine "Cloning index $idx ($defName) -> $noDefName for Separate-Defender ISO..."
+            } else {
+                Write-Host "Cloning index $idx ($defName) -> $noDefName for Separate-Defender ISO..."
+            }
+
+            if (Get-Command Clone-WindowsWimImage -ErrorAction SilentlyContinue) {
+                Clone-WindowsWimImage -ImagePath $installWim -SourceIndex $idx -DestinationName $noDefName -DestinationDescription $noDefDesc -WimLibPath $wimlib
+            } else {
+                & $wimlib export $installWim $idx $installWim "$noDefName" "$noDefDesc"
+            }
+
+            $noDefIdx = @(Get-WindowsImage -ImagePath $installWim).Count
+            if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+                Write-CleanLine "Servicing cloned index $noDefIdx to purge Windows Defender & SecHealthUI..."
+            } else {
+                Write-Host "Servicing cloned index $noDefIdx to purge Windows Defender & SecHealthUI..."
+            }
+
+            $mountDirNoDef = Join-Path $env:TEMP "Mount_Servicing_NoDef_$([System.IO.Path]::GetRandomFileName())"
+            Mount-WindowsImageIndex -ImagePath $installWim -Index $noDefIdx -MountDir $mountDirNoDef
+            $isMountedNoDef = $true
+            try {
+                & powershell -ExecutionPolicy Bypass -File $servicingScript `
+                    -MountDir $mountDirNoDef `
+                    -ProfileName $targetProfile `
+                    -ProfileDir $profileDir `
+                    -NSudoPath $nsudo `
+                    -ForceRemoveDefender
+
+                if ($LASTEXITCODE -ne 0) { throw "Servicing cloned index $noDefIdx failed with exit code $LASTEXITCODE" }
+                Dismount-WindowsImageIndex -MountDir $mountDirNoDef -Commit
+                $isMountedNoDef = $false
+            } finally {
+                if ($isMountedNoDef) {
+                    Dismount-WindowsImageIndex -MountDir $mountDirNoDef -Discard
+                }
+            }
+
+            if (Get-Command Set-WimImageInfo -ErrorAction SilentlyContinue) {
+                Set-WimImageInfo -ImagePath $installWim -Index $noDefIdx -NewName $noDefName -NewDescription $noDefDesc -WimLibPath $wimlib
+            }
+        }
     }
 
+    $finalImageCount = @(Get-WindowsImage -ImagePath $installWim).Count
     if (-not $esd -or $wimOnly) {
         if (Get-Command Optimize-WindowsWim -ErrorAction SilentlyContinue) {
             if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
-                Write-CleanLine "Compacting serviced install.wim ($imageCount index(es)) to purge orphaned streams..."
+                Write-CleanLine "Compacting serviced install.wim ($finalImageCount index(es)) to purge orphaned streams..."
             }
-            Optimize-WindowsWim -ImagePath $installWim -ImageCount $imageCount -WimLibPath $wimlib
+            Optimize-WindowsWim -ImagePath $installWim -ImageCount $finalImageCount -WimLibPath $wimlib
             if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
                 Write-CleanLine "Compaction complete. New install.wim size: $((Get-Item $installWim).Length) bytes"
             }
