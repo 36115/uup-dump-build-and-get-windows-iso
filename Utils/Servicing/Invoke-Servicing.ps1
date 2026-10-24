@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Master Offline Windows Image Servicing Engine.
 .DESCRIPTION
@@ -35,10 +35,22 @@ param(
     [string]$ScriptsDir = "",
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipCleanup
+    [switch]$SkipCleanup,
+
+    [Parameter(Mandatory = $false)]
+    $RemoveDefender = $false,
+
+    [Parameter(Mandatory = $false)]
+    [string]$TargetOS = ""
 )
 
 $ErrorActionPreference = 'Stop'
+
+$RemoveDefender = if ($RemoveDefender -is [bool]) {
+    $RemoveDefender
+} else {
+    ([string]$RemoveDefender -match '(?i)^(true|1|both|dual|remove|\$true)$')
+}
 
 function Write-Step([string]$msg) {
     Write-Host "`n>>> $msg" -ForegroundColor Cyan
@@ -63,18 +75,72 @@ $repo = if (Get-Command Get-RepoRoot -ErrorAction SilentlyContinue) { Get-RepoRo
 $profileHelper = Join-Path $repo "Utils\Common\Resolve-Profile.ps1"
 if (Test-Path $profileHelper) { . $profileHelper }
 
+if (-not $TargetOS) {
+    if (Test-Path variable:script:targetOS) { $TargetOS = $script:targetOS }
+    elseif (Test-Path variable:global:targetOS) { $TargetOS = $global:targetOS }
+    elseif (Test-Path variable:targetOS) { $TargetOS = (Get-Variable -Name targetOS -ValueOnly -ErrorAction SilentlyContinue) }
+}
+if (-not $TargetOS -and $MountDir -and (Get-Command Get-OfflineWindowsVersion -ErrorAction SilentlyContinue)) {
+    $ver = Get-OfflineWindowsVersion -MountDir $MountDir
+    $TargetOS = $ver.TargetOS
+}
+if (-not $TargetOS) { $TargetOS = "11" }
+$targetOS = ($TargetOS -replace '\D', '')
+$global:targetOS = $targetOS
+
 # Resolve ProfileDir
 if (-not $ProfileDir -and $ProfileName) {
     if (Get-Command Resolve-ProfileDir -ErrorAction SilentlyContinue) {
-        $ProfileDir = Resolve-ProfileDir -ProfileName $ProfileName -RepoRoot $repo
-    }
-}
+        $ProfileDir = Resolve-ProfileDir -ProfileName $ProfileName -TargetOS $TargetOS -RepoRoot $repo
+    } else {
+        $candidateProfiles = @(
+            (Join-Path $repo "Config\$ProfileName"),
+            (Join-Path $repo "Config\Default")
+        )
+        foreach ($cand in $candidateProfiles) {
+            if (Test-Path $cand) {
+                $ProfileDir = (Resolve-Path $cand).Path
+                break
+            }
+        }
     }
 }
 
 # Resolve profile hierarchy if profile.psd1 is present
-$profileChain = if ($ProfileDir -and (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
-    Get-ProfileHierarchy -ProfileDir $ProfileDir -RepoRoot $repo -MountDir $MountDir
+if (-not (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
+    function Get-ProfileHierarchy([string]$dir, [string]$repoRoot, [string]$mountDir = "") {
+        $chain = [System.Collections.Generic.List[psobject]]::new()
+        $currDir = $dir
+        while ($currDir -and (Test-Path (Join-Path $currDir "profile.psd1"))) {
+            $manifestPath = Join-Path $currDir "profile.psd1"
+            $cfg = if (Get-Command Import-ProfileManifest -ErrorAction SilentlyContinue) {
+                Import-ProfileManifest -Path $manifestPath -MountDir $mountDir
+            } else {
+                Import-PowerShellDataFile -Path $manifestPath
+            }
+            $chain.Insert(0, [PSCustomObject]@{ Dir = $currDir; Config = $cfg })
+            if ($cfg.ContainsKey('Extends') -and $cfg.Extends) {
+                $parent = Join-Path $repoRoot "Config\$($cfg.Extends)"
+                if (Test-Path (Join-Path $parent "profile.psd1")) {
+                    $currDir = (Resolve-Path $parent).Path
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
+        }
+        return $chain
+    }
+
+}
+
+$profileChain = if ($ProfileDir) {
+    if (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue) {
+        Get-ProfileHierarchy -ProfileDir $ProfileDir -RepoRoot $repo -MountDir $MountDir -TargetOS $TargetOS
+    } else {
+        Get-ProfileHierarchy -dir $ProfileDir -repoRoot $repo -mountDir $MountDir
+    }
 } else { @() }
 $profileRegFiles = [System.Collections.Generic.List[string]]::new()
 $profileScripts = [System.Collections.Generic.List[string]]::new()
@@ -116,7 +182,6 @@ if (-not $RegistryDir) {
         $RegistryDir = (Resolve-Path (Join-Path $ProfileDir "Registry")).Path
     } else {
         $candidates = @(
-            (Join-Path $repo "Config\Win11\Registry"),
             (Join-Path $repo "Config\Registry"),
             (Join-Path $PSScriptRoot "Config\Registry")
         )
@@ -153,7 +218,6 @@ if (-not $ScriptsDir) {
         $ScriptsDir = (Resolve-Path (Join-Path $ProfileDir "Scripts")).Path
     } else {
         $candidates = @(
-            (Join-Path $repo "Config\Win11\Scripts"),
             (Join-Path $repo "Config\Scripts"),
             (Join-Path $PSScriptRoot "Config\Scripts")
         )
@@ -367,6 +431,7 @@ function Get-RegSubKey {
     return $out.ToArray()
 }
 
+# Compatibility aliases
 
 function Remove-ScheduledTask {
     [CmdletBinding()]
@@ -413,6 +478,9 @@ function Remove-ScheduledTask {
     }
 }
 
+function Invoke-ElevatedRegDelete([string[]]$regKeys) {
+    Remove-RegKey -Key $regKeys -Elevated
+}
 
 function Remove-ForceFilesByPattern {
     [CmdletBinding()]
@@ -899,7 +967,6 @@ function Filter-OfflineProvisionedAppxPackages {
         $EnabledApps = @(
             'Microsoft.WindowsStore',
             'Microsoft.StorePurchaseApp',
-            'Microsoft.SecHealthUI',
             'Microsoft.DesktopAppInstaller',
             'Microsoft.XboxIdentityProvider'
         )
@@ -1126,10 +1193,24 @@ try {
     # Execute modular servicing scripts from profile manifest
     if ($profileScripts.Count -gt 0) {
         foreach ($s in $profileScripts) {
+            $scriptCmd = Get-Command -Name $s -CommandType ExternalScript -ErrorAction SilentlyContinue
+            if ($scriptCmd -and $scriptCmd.Parameters.ContainsKey('WinPeHiveKey') -and -not $scriptCmd.Parameters.ContainsKey('CustomRegPath')) {
+                continue
+            }
             Write-Step "Executing Profile Script: $(Split-Path $s -Leaf)..."
-            . $s -MountDir $MountDir -CustomRegPath $CustomRegPath -NSudoPath $NSudoPath
+            $scriptArgs = @{
+                MountDir      = $MountDir
+                CustomRegPath = $CustomRegPath
+                NSudoPath     = $NSudoPath
+            }
+            if ($PSBoundParameters.ContainsKey('RemoveDefender')) {
+                if ($scriptCmd -and $scriptCmd.Parameters.ContainsKey('RemoveDefender')) {
+                    $scriptArgs['RemoveDefender'] = $RemoveDefender
+                }
+            }
+            . $s @scriptArgs
         }
-    } elseif ($ScriptsDir -and (Test-Path $ScriptsDir)) {
+    } elseif ($profileChain.Count -eq 0 -and $ScriptsDir -and (Test-Path $ScriptsDir)) {
         $searchDirs = @(
             (Join-Path $ScriptsDir "All"),
             (Join-Path $ScriptsDir "OS")
@@ -1144,7 +1225,18 @@ try {
         $scriptsList = $scriptsList | Sort-Object Name
         foreach ($s in $scriptsList) {
             Write-Step "Executing Servicing Component: $($s.Name)..."
-            . $s.FullName -MountDir $MountDir -CustomRegPath $CustomRegPath -NSudoPath $NSudoPath
+            $scriptArgs = @{
+                MountDir      = $MountDir
+                CustomRegPath = $CustomRegPath
+                NSudoPath     = $NSudoPath
+            }
+            if ($PSBoundParameters.ContainsKey('RemoveDefender')) {
+                $scriptCmd = Get-Command -Name $s.FullName -CommandType ExternalScript -ErrorAction SilentlyContinue
+                if ($scriptCmd -and $scriptCmd.Parameters.ContainsKey('RemoveDefender')) {
+                    $scriptArgs['RemoveDefender'] = $RemoveDefender
+                }
+            }
+            . $s.FullName @scriptArgs
         }
     } else {
         Write-Info "No modular servicing scripts executed."
@@ -1170,4 +1262,3 @@ Set-Location $env:TEMP
 [System.GC]::Collect()
 [System.GC]::WaitForPendingFinalizers()
 Start-Sleep -Milliseconds 500
-
