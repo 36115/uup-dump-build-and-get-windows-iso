@@ -229,6 +229,65 @@ function Optimize-WindowsWim {
     }
 }
 
+function Clone-WindowsWimImage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ImagePath,
+        [Parameter(Mandatory = $true)]
+        [int]$SourceIndex,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationName,
+        [Parameter(Mandatory = $false)]
+        [string]$DestinationDescription = "",
+        [Parameter(Mandatory = $false)]
+        [string]$WimLibPath = ""
+    )
+
+    if (-not $WimLibPath) { $WimLibPath = Get-WimLibPath }
+    if ($WimLibPath -and (Test-Path $WimLibPath)) {
+        & $WimLibPath export $ImagePath $SourceIndex $ImagePath "$DestinationName" "$DestinationDescription" --check
+        if ($LASTEXITCODE -ne 0) { throw "wimlib export clone failed on $ImagePath index $SourceIndex with exit code $LASTEXITCODE" }
+    } else {
+        $dir = Split-Path $ImagePath -Parent
+        $tempClone = Join-Path $dir "clone_$([System.IO.Path]::GetRandomFileName()).wim"
+        try {
+            & dism.exe /Export-Image /SourceImageFile:$ImagePath /SourceIndex:$SourceIndex /DestinationImageFile:$tempClone /DestinationName:"$DestinationName"
+            if ($LASTEXITCODE -ne 0) { throw "dism /Export-Image to temporary clone failed on index $SourceIndex with exit code $LASTEXITCODE" }
+            & dism.exe /Export-Image /SourceImageFile:$tempClone /SourceIndex:1 /DestinationImageFile:$ImagePath /DestinationName:"$DestinationName"
+            if ($LASTEXITCODE -ne 0) { throw "dism /Export-Image from clone back to destination failed with exit code $LASTEXITCODE" }
+        } finally {
+            if (Test-Path $tempClone) { Remove-Item $tempClone -Force -ErrorAction SilentlyContinue }
+        }
+    }
+}
+
+function Set-WimImageInfo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ImagePath,
+        [Parameter(Mandatory = $true)]
+        [int]$Index,
+        [Parameter(Mandatory = $true)]
+        [string]$NewName,
+        [Parameter(Mandatory = $false)]
+        [string]$NewDescription = "",
+        [Parameter(Mandatory = $false)]
+        [string]$WimLibPath = ""
+    )
+
+    if (-not $WimLibPath) { $WimLibPath = Get-WimLibPath }
+    if ($WimLibPath -and (Test-Path $WimLibPath)) {
+        if ($NewDescription) {
+            & $WimLibPath info $ImagePath $Index "$NewName" "$NewDescription" --check
+        } else {
+            & $WimLibPath info $ImagePath $Index "$NewName" --check
+        }
+        if ($LASTEXITCODE -ne 0) { throw "wimlib info failed to update metadata on $ImagePath index $Index with exit code $LASTEXITCODE" }
+    }
+}
+
 function Resolve-ServicingWim {
     [CmdletBinding()]
     param(
