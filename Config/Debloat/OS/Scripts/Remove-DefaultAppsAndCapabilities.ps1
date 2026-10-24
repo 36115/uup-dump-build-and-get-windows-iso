@@ -14,7 +14,10 @@ param(
     [string]$CustomRegPath = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$NSudoPath = ""
+    [string]$NSudoPath = "",
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$EnabledApps = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +30,9 @@ if (Test-Path $inboxApps) {
 } else {
     Write-Info "Windows\InboxApps already absent."
 }
+
+Write-Step "Filtering Provisioned Appx Packages (preserving EnabledApps & framework runtimes)..."
+Filter-OfflineProvisionedAppxPackages -MountDir $MountDir -EnabledApps $EnabledApps
 
 Write-Step "Purging OneDrive Setup Binaries and Decoupling Shell Namespace..."
 $oneDriveBinaries = @(
@@ -43,6 +49,7 @@ foreach ($bin in $oneDriveBinaries) {
 
 $oneDriveDirs = @(
     "$MountDir\Windows\System32\OneDrive.Setup"
+    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\OneDrive"
 )
 foreach ($dir in $oneDriveDirs) {
     if (Test-Path $dir) {
@@ -74,23 +81,46 @@ Remove-ScheduledTask "\Microsoft\Windows\OneDrive"
 Write-Success "Purged OneDrive autorun, shell namespace CLSIDs, and enforced policies."
 
 Write-Step "Removing Windows Capabilities (FOD) & Legacy Optional Features..."
-$legacyFeatures = @("WindowsMediaPlayer", "TFTP", "WCF-TCP-PortSharing45", "MSMQ-Container")
-foreach ($feat in $legacyFeatures) {
-    Disable-OfflineFeature -MountDir $MountDir -FeatureName $feat -Remove
+if (Get-Command Invoke-WithoutOfflineHives -ErrorAction SilentlyContinue) {
+    Invoke-WithoutOfflineHives -MountDir $MountDir -Action {
+        $legacyFeatures = @("WindowsMediaPlayer", "TFTP", "WCF-TCP-PortSharing45", "MSMQ-Container")
+        foreach ($feat in $legacyFeatures) {
+            Disable-OfflineFeature -MountDir $MountDir -FeatureName $feat -Remove
+        }
+
+        $capPatterns = @(
+            "Browser.InternetExplorer*",
+            "Language.Handwriting*",
+            "Language.Speech*",
+            "Language.TextToSpeech*",
+            "Language.OCR*",
+            "MathRecognizer*",
+            "App.StepsRecorder*",
+            "OpenSSH.Client*",
+            "Hello.Face*"
+        )
+        Remove-OfflineCapability -MountDir $MountDir -Pattern $capPatterns
+    }
+} else {
+    $legacyFeatures = @("WindowsMediaPlayer", "TFTP", "WCF-TCP-PortSharing45", "MSMQ-Container")
+    foreach ($feat in $legacyFeatures) {
+        Disable-OfflineFeature -MountDir $MountDir -FeatureName $feat -Remove
+    }
+
+    $capPatterns = @(
+        "Browser.InternetExplorer*",
+        "Language.Handwriting*",
+        "Language.Speech*",
+        "Language.TextToSpeech*",
+        "Language.OCR*",
+        "MathRecognizer*",
+        "App.StepsRecorder*",
+        "OpenSSH.Client*",
+        "Hello.Face*"
+    )
+    Remove-OfflineCapability -MountDir $MountDir -Pattern $capPatterns
 }
 
-$capPatterns = @(
-    "Browser.InternetExplorer*",
-    "Language.Handwriting*",
-    "Language.Speech*",
-    "Language.TextToSpeech*",
-    "Language.OCR*",
-    "MathRecognizer*",
-    "App.StepsRecorder*",
-    "OpenSSH.Client*",
-    "Hello.Face*"
-)
-Remove-OfflineCapability -MountDir $MountDir -Pattern $capPatterns
 $wmpDirs = @(
     "$MountDir\Program Files\Windows Media Player",
     "$MountDir\Program Files (x86)\Windows Media Player"
