@@ -295,16 +295,28 @@ jobs:
         shell: pwsh
         run: |
           $isoItem = Get-ChildItem -Path "Out/Target" -Filter "*.ISO" -Recurse | Select-Object -First 1
+          if (-not $isoItem) { throw "No ISO found in Out/Target to split." }
           $targetDir = $isoItem.DirectoryName
-          7z a -tzip -mx=0 -v1950M -bsp2 "$targetDir/$($env:ISO_NAME).zip" "$($isoItem.FullName)"
+          Push-Location $targetDir
+          try {
+            7z a -tzip -mx=0 -v1950M -bsp2 "$($env:ISO_NAME).zip" "$($isoItem.Name)"
+          } finally {
+            Pop-Location
+          }
           Get-ChildItem "$targetDir/$($env:ISO_NAME).zip.*" | Sort-Object Name | ForEach-Object { Write-Host "Created: $($_.FullName)" }
+          New-Item -ItemType Directory -Path "Out/Artifact" -Force | Out-Null
+          try {
+            New-Item -ItemType HardLink -Path "Out/Artifact/$($isoItem.Name)" -Target $isoItem.FullName -Force | Out-Null
+          } catch {
+            Copy-Item -Path $isoItem.FullName -Destination "Out/Artifact/$($isoItem.Name)" -Force
+          }
 
       - name: Upload ISO artifact
         id: upload_iso_artifact
         uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ env.ISO_NAME }}
-          path: Out/Target/**/*.ISO
+          path: Out/Artifact/*.ISO
           if-no-files-found: error
 
       - name: Set artifact_url
@@ -640,16 +652,28 @@ jobs:
         shell: pwsh
         run: |
           $isoItem = Get-ChildItem -Path "Out/Target" -Filter "*.ISO" -Recurse | Select-Object -First 1
+          if (-not $isoItem) { throw "No ISO found in Out/Target to split." }
           $targetDir = $isoItem.DirectoryName
-          7z a -tzip -mx=0 -v1950M -bsp2 "$targetDir/$($env:ISO_NAME).zip" "$($isoItem.FullName)"
+          Push-Location $targetDir
+          try {
+            7z a -tzip -mx=0 -v1950M -bsp2 "$($env:ISO_NAME).zip" "$($isoItem.Name)"
+          } finally {
+            Pop-Location
+          }
           Get-ChildItem "$targetDir/$($env:ISO_NAME).zip.*" | Sort-Object Name | ForEach-Object { Write-Host "Created: $($_.FullName)" }
+          New-Item -ItemType Directory -Path "Out/Artifact" -Force | Out-Null
+          try {
+            New-Item -ItemType HardLink -Path "Out/Artifact/$($isoItem.Name)" -Target $isoItem.FullName -Force | Out-Null
+          } catch {
+            Copy-Item -Path $isoItem.FullName -Destination "Out/Artifact/$($isoItem.Name)" -Force
+          }
 
       - name: Upload ISO artifact
         id: upload_iso_artifact
         uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ env.ISO_NAME }}
-          path: Out/Target/**/*.ISO
+          path: Out/Artifact/*.ISO
           if-no-files-found: error
 
       - name: Set artifact_url
