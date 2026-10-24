@@ -16,6 +16,7 @@ run-name: >
   ${{ inputs.drivers && 'DRIVERS' || '' }}
   ${{ inputs.netfx3 && 'NETFX3' || '' }}
   ${{ inputs.profile_name && inputs.profile_name || '' }}
+  ${{ inputs.separate_defender_editions && 'SEPARATE-DEFENDER' || '' }}
 
 on:
   workflow_dispatch:
@@ -183,6 +184,11 @@ on:
         type: string
         required: false
         default: ""
+      separate_defender_editions:
+        description: "Separate Defender and No Defender editions"
+        type: boolean
+        required: true
+        default: true
 
 permissions:
   contents: write
@@ -266,6 +272,11 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if ('${{ inputs.separate_defender_editions }}' -eq 'true') {
+            $opts += ' -separateDefenderEditions'
+          } else {
+            $opts += ' -separateDefenderEditions:$false'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
             $opts += ' -profileName "${{ inputs.profile_name }}"'
           }
@@ -352,9 +363,10 @@ jobs:
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
             # map short flags to full descriptions from workflow inputs
             $descMap = @{
-              '-esd'     = 'Use ESD compression'
-              '-drivers' = 'Add additional drivers'
-              '-netfx3'  = 'Add .NET Framework 3.5'
+              '-esd'                       = 'Use ESD compression'
+              '-drivers'                   = 'Add additional drivers'
+              '-netfx3'                    = 'Add .NET Framework 3.5'
+              '-separatedefendereditions'  = 'Separate Defender editions'
             }
             # split -> normalize -> map -> deduplicate
             $items = $opts -split '\s+' |
@@ -538,6 +550,11 @@ jobs:
             $opts += ' -drivers'
           }
           if ('${{ inputs.netfx3 }}' -eq 'true')  { $opts += ' -netfx3' }
+          if ('${{ inputs.separate_defender_editions }}' -eq 'true') {
+            $opts += ' -separateDefenderEditions'
+          } else {
+            $opts += ' -separateDefenderEditions:$false'
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
             $opts += ' -profileName "${{ inputs.profile_name }}"'
           }
@@ -708,9 +725,10 @@ jobs:
           $optsRow = $null
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
             $descMap = @{
-              '-esd'     = 'Use ESD compression'
-              '-drivers' = 'Add additional drivers'
-              '-netfx3'  = 'Add .NET Framework 3.5'
+              '-esd'                       = 'Use ESD compression'
+              '-drivers'                   = 'Add additional drivers'
+              '-netfx3'                    = 'Add .NET Framework 3.5'
+              '-separatedefendereditions'  = 'Separate Defender editions'
             }
             $items = $opts -split '\s+' |
               Where-Object { $_ -and $_.Trim() -ne '' } |
