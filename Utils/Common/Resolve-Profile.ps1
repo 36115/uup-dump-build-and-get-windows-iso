@@ -397,30 +397,15 @@ function Get-ProfileEnabledApps {
         [psobject[]]$ProfileChain
     )
 
-    $removeDefender = if (Get-Command Get-ProfileRemoveDefender -ErrorAction SilentlyContinue) {
-        Get-ProfileRemoveDefender -ProfileChain $ProfileChain
-    } else {
-        $false
-    }
-
     $apps = [System.Collections.Generic.List[string]]::new()
     foreach ($item in $ProfileChain) {
         $cfg = $item.Config
         if ($cfg.ContainsKey('EnabledApps') -and $cfg.EnabledApps) {
             foreach ($app in $cfg.EnabledApps) {
-                if ($removeDefender -and ($app -like '*SecHealthUI*' -or $app -eq 'Microsoft.SecHealthUI')) {
-                    continue
-                }
                 if ($app -and -not $apps.Contains($app)) {
                     $apps.Add($app)
                 }
             }
-        }
-    }
-
-    if (-not $removeDefender -and $apps.Count -gt 0) {
-        if (-not $apps.Contains('Microsoft.SecHealthUI')) {
-            $apps.Add('Microsoft.SecHealthUI')
         }
     }
 
@@ -435,8 +420,8 @@ function Get-ProfileRemoveFrameworkDependencies {
         [psobject[]]$ProfileChain
     )
 
-    foreach ($item in $ProfileChain) {
-        $cfg = $item.Config
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
         if ($cfg.ContainsKey('RemoveFrameworkDependencies') -and $cfg.RemoveFrameworkDependencies) {
             return [bool]$cfg.RemoveFrameworkDependencies
         }
@@ -464,4 +449,49 @@ function Get-ProfileExcludedDependencies {
         }
     }
     return $excluded.ToArray()
+}
+
+function Get-ProfileDefenderMode {
+    <#
+    .SYNOPSIS
+        Resolves the Defender build strategy from the profile chain ('Both', 'Remove', or 'Keep').
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
+        if ($cfg -and $cfg.ContainsKey('DefenderBuild') -and $cfg.DefenderBuild) {
+            return [string]$cfg.DefenderBuild
+        }
+    }
+    return 'Keep'
+}
+
+function Get-ProfileRemoveDefender {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    $mode = Get-ProfileDefenderMode -ProfileChain $ProfileChain
+    return ($mode -match '(?i)^(both|dual|remove|true)$')
+}
+
+function Get-ProfileSeparateDefenderEditions {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    $mode = Get-ProfileDefenderMode -ProfileChain $ProfileChain
+    return ($mode -match '(?i)^(both|dual)$')
 }
