@@ -92,18 +92,39 @@ Additional options:
 
 ## Usage
 
-Get the latest Windows 11 26H2 iso:
+### Quick Start (Local Machine)
 
-```bash
-powershell uup-dump-get-windows-iso.ps1 windows-1126h2 c:/output -architecture x64 -edition pro -lang en-us -esd -drivers -netfx3
+Run with zero arguments to build using your active configuration:
+
+```powershell
+.\Build-Iso.ps1
 ```
 
-When everything works correctly, you'll have the iso in the `output` directory at, e.g., `c:/output/26300.9711.261009-2244.26H2_GE_RELEASE_SVC_PROD1_CLIENTPRO_OEMRET_X64FRE_EN-US.l.ISO`.
+#### Interactive Preset Menu:
+```powershell
+.\Build-Iso.ps1 -Menu
+```
 
-You can also download the system revision of your choice. For example, if you want to build 25H2 26200.7705 iso:
+#### Choose a Predefined Build Preset:
+```powershell
+.\Build-Iso.ps1 -Preset Win11-26H2-Pro-SeparateDefender
+.\Build-Iso.ps1 -Preset Win10-22H2-Pro-SeparateDefender
+.\Build-Iso.ps1 -ListPresets
+```
 
-```bash
-powershell uup-dump-get-windows-iso.ps1 windows-11new c:/output -architecture x64 -edition pro -lang en-us -esd -drivers -netfx3 -revision 7705
+#### Command-Line Overrides:
+```powershell
+.\Build-Iso.ps1 -windowsTargetName windows-11@26h2 -edition pro -separateDefenderEditions:$true -destinationDirectory Out
+```
+
+---
+
+### Command-Line / CI Usage
+
+Run directly with positional or named parameters:
+
+```powershell
+pwsh Build-Iso.ps1 windows-11@26h2 Out -architecture x64 -edition pro -lang en-us -profileName Debloat -separateDefenderEditions
 ```
 
 
