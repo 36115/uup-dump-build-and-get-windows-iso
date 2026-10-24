@@ -469,3 +469,20 @@ function Get-ProfileExcludedDependencies {
     }
     return $excluded.ToArray()
 }
+
+function Get-ProfileRemoveDefender {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    foreach ($item in $ProfileChain) {
+        $cfg = $item.Config
+        if ($cfg.ContainsKey('RemoveDefender')) {
+            return [bool]$cfg.RemoveDefender
+        }
+    }
+    return $false
+}

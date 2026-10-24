@@ -30,6 +30,11 @@
         'Microsoft.XboxIdentityProvider'
     )
 
+    # Windows Defender and Security Health removal
+    # If set to $false, Windows Defender is preserved and Microsoft.SecHealthUI is automatically retained.
+    # If set to $true, Windows Defender and Microsoft.SecHealthUI are purged.
+    RemoveDefender = $false
+
     # Force remove all framework dependencies (Microsoft.VCLibs, Microsoft.UI.Xaml, .NET.Native)
     # WARNING: Enabling this will break the remaining Store apps above because they depend on these runtimes.
     # Only enable if EnabledApps is empty (@()) and you want a 100% headless/legacy win32-only OS.
