@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     UUP Dump API client, metadata resolver, and aria2 patch utilities.
 #>
@@ -206,12 +206,19 @@ function Patch-Aria2-Flags {
     return
   }
 
-  # Fallback: PowerShell regex (preserves UTF-16LE)
+  # Fallback: PowerShell regex with encoding auto-detection
   if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
     Write-CleanLine "sed not found. Patching aria2 flags in $CmdPath using PowerShell fallback."
   }
-  $bytes   = [System.IO.File]::ReadAllBytes($CmdPath)
-  $content = [System.Text.Encoding]::Unicode.GetString($bytes)
+  $bytes    = [System.IO.File]::ReadAllBytes($CmdPath)
+  $encoding = if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+    [System.Text.Encoding]::Unicode
+  } elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+    [System.Text.Encoding]::UTF8
+  } else {
+    [System.Text.UTF8Encoding]::new($false)
+  }
+  $content  = $encoding.GetString($bytes)
 
   $patternsToRemove = @(
     '\s--console-log-level=\w+\b',
@@ -226,7 +233,7 @@ function Patch-Aria2-Flags {
   $inject = '--quiet=true --console-log-level=error --summary-interval=0 --download-result=hide --enable-color=false '
   $content = [regex]::Replace($content, '("%aria2%"\s+)', ('$1' + $inject), 'IgnoreCase, CultureInvariant')
 
-  $newBytes = [System.Text.Encoding]::Unicode.GetBytes($content)
+  $newBytes = $encoding.GetBytes($content)
   [System.IO.File]::WriteAllBytes($CmdPath, $newBytes)
 }
 
@@ -408,6 +415,76 @@ function Set-UupConvertConfig {
   return $tag
 }
 
+function Patch-UupDownloadApps {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$BuildDirectory
+  )
+
+  $cmdPath = Join-Path $BuildDirectory 'uup_download_windows.cmd'
+  if (-not (Test-Path $cmdPath)) { return }
+
+  $bytes = [System.IO.File]::ReadAllBytes($cmdPath)
+  $encoding = if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+    [System.Text.Encoding]::Unicode
+  } elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+    [System.Text.Encoding]::UTF8
+  } else {
+    [System.Text.UTF8Encoding]::new($false)
+  }
+  $content = $encoding.GetString($bytes)
+
+  if ($content -notmatch '(?m)^:DOWNLOAD_APPS\b') {
+    return
+  }
+
+  $iniFile = Join-Path $BuildDirectory "ConvertConfig.ini"
+  $skipApps = $false
+  $customList = $false
+  if (Test-Path $iniFile) {
+    $iniText = Get-Content -Path $iniFile -Raw
+    if ($iniText -match '(?m)^\s*SkipApps\s*=\s*1\b') {
+      $skipApps = $true
+    }
+    if ($iniText -match '(?m)^\s*CustomList\s*=\s*1\b') {
+      $customList = $true
+    }
+  }
+
+  if ($skipApps) {
+    if ($content -notmatch '(?m)^:DOWNLOAD_APPS\s*\r?\ngoto\s+:DOWNLOAD_UUPS') {
+      if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+        Write-CleanLine "Patching ${cmdPath}: Skipping Microsoft Store Apps download (SkipApps=1)."
+      }
+      $content = [regex]::Replace($content, '(?m)(^:DOWNLOAD_APPS\s*$)', "`$1`r`ngoto :DOWNLOAD_UUPS")
+      [System.IO.File]::WriteAllBytes($cmdPath, $encoding.GetBytes($content))
+    }
+    return
+  }
+
+  $filterJson = Join-Path $BuildDirectory "files\apps_filter_config.json"
+  if ($customList -or (Test-Path $filterJson)) {
+    # Ensure Filter-UupAria2AppScript.ps1 exists in files\
+    $filterScriptSource = Join-Path $PSScriptRoot "Filter-UupAria2AppScript.ps1"
+    $filesDir = Join-Path $BuildDirectory "files"
+    if (-not (Test-Path $filesDir)) { New-Item -ItemType Directory -Path $filesDir -Force | Out-Null }
+    $filterDest = Join-Path $filesDir "Filter-UupAria2AppScript.ps1"
+    if (Test-Path $filterScriptSource) {
+      Copy-Item -Path $filterScriptSource -Destination $filterDest -Force
+    }
+
+    $filterCall = 'powershell -NoProfile -ExecutionPolicy Bypass -File "files\Filter-UupAria2AppScript.ps1" "%aria2Script%"'
+    if ($content -notmatch [regex]::Escape($filterCall)) {
+      if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+        Write-CleanLine "Patching ${cmdPath}: Injecting selective aria2 Store Apps filter."
+      }
+      $content = [regex]::Replace($content, '(?m)(^\s*echo\s+Downloading\s+Microsoft\s+Store\s+Apps\.\.\.)', "$filterCall`r`n`$1")
+      [System.IO.File]::WriteAllBytes($cmdPath, $encoding.GetBytes($content))
+    }
+  }
+}
+
 function Set-UupCustomAppsList {
   [CmdletBinding()]
   param(
@@ -415,46 +492,50 @@ function Set-UupCustomAppsList {
     [string]$BuildDirectory,
 
     [Parameter(Mandatory = $true)]
-    [string[]]$EnabledApps
+    [string[]]$EnabledApps,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$RemoveFrameworkDependencies,
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$ExcludedDependencies = @()
   )
 
   $customAppsFile = Join-Path $BuildDirectory "CustomAppsList.txt"
-  if (-not (Test-Path $customAppsFile)) {
-    return
-  }
+  if (Test-Path $customAppsFile) {
+    $lines = Get-Content -Path $customAppsFile
+    $newLines = [System.Collections.Generic.List[string]]::new()
 
-  $lines = Get-Content -Path $customAppsFile
-  $newLines = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in $lines) {
+      $trimmed = $line.Trim()
+      if (-not $trimmed -or $trimmed.StartsWith('###')) {
+        $newLines.Add($line)
+        continue
+      }
 
-  foreach ($line in $lines) {
-    $trimmed = $line.Trim()
-    if (-not $trimmed -or $trimmed.StartsWith('###')) {
-      $newLines.Add($line)
-      continue
-    }
+      $entry = $trimmed.TrimStart('#').Trim()
+      if (-not $entry) {
+        $newLines.Add($line)
+        continue
+      }
 
-    $entry = $trimmed.TrimStart('#').Trim()
-    if (-not $entry) {
-      $newLines.Add($line)
-      continue
-    }
+      $isWanted = $false
+      foreach ($app in $EnabledApps) {
+        if ($entry -like "$app*" -or $entry -eq $app) {
+          $isWanted = $true
+          break
+        }
+      }
 
-    $isWanted = $false
-    foreach ($app in $EnabledApps) {
-      if ($entry -like "$app*" -or $entry -eq $app) {
-        $isWanted = $true
-        break
+      if ($isWanted) {
+        $newLines.Add($entry)
+      } else {
+        $newLines.Add("# $entry")
       }
     }
 
-    if ($isWanted) {
-      $newLines.Add($entry)
-    } else {
-      $newLines.Add("# $entry")
-    }
+    [System.IO.File]::WriteAllLines($customAppsFile, $newLines, [System.Text.Encoding]::ASCII)
   }
-
-  [System.IO.File]::WriteAllLines($customAppsFile, $newLines, [System.Text.Encoding]::ASCII)
 
   # Enable CustomList in ConvertConfig.ini if present
   $iniFile = Join-Path $BuildDirectory "ConvertConfig.ini"
@@ -462,6 +543,32 @@ function Set-UupCustomAppsList {
     $convertConfig = Get-Content -Path $iniFile -Raw
     $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'CustomList' -Value '1'
     Set-Content -Encoding ascii -Path $iniFile -Value $convertConfig
+  }
+
+  # Write apps_filter_config.json for selective aria2 app download filter
+  $filesDir = Join-Path $BuildDirectory "files"
+  if (-not (Test-Path $filesDir)) { New-Item -ItemType Directory -Path $filesDir -Force | Out-Null }
+
+  $7zHelper = Join-Path $PSScriptRoot "..\7z\7z.ps1"
+  if (Test-Path $7zHelper) { . $7zHelper }
+  $sevenZipPath = if (Get-Command Get-7zPath -ErrorAction SilentlyContinue) { Get-7zPath } else { $null }
+
+  $filterConfig = [ordered]@{
+    EnabledApps                 = @($EnabledApps)
+    RemoveFrameworkDependencies = [bool]$RemoveFrameworkDependencies
+    ExcludedDependencies        = @($ExcludedDependencies)
+  }
+  if ($sevenZipPath) {
+    $filterConfig['SevenZipPath'] = $sevenZipPath
+  }
+
+  $filterJson = Join-Path $filesDir "apps_filter_config.json"
+  $filterConfig | ConvertTo-Json -Compress | Set-Content -Path $filterJson -Encoding utf8
+
+  # Copy filter script to files\
+  $filterScriptSource = Join-Path $PSScriptRoot "Filter-UupAria2AppScript.ps1"
+  if (Test-Path $filterScriptSource) {
+    Copy-Item -Path $filterScriptSource -Destination (Join-Path $filesDir "Filter-UupAria2AppScript.ps1") -Force
   }
 }
 
@@ -479,6 +586,7 @@ function Invoke-UupDownloadProcess {
   try {
     # Patch aria2 flags in the batch before running it
     Patch-Aria2-Flags -CmdPath (Join-Path $BuildDirectory 'uup_download_windows.cmd')
+    Patch-UupDownloadApps -BuildDirectory $BuildDirectory
 
     if ([string]::IsNullOrWhiteSpace($RawLogPath)) {
       $tempDir = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
@@ -607,8 +715,6 @@ function Get-UupTargetDefinition {
 
     $edInfo = if (Get-Command Get-EditionInfo -ErrorAction SilentlyContinue) {
         Get-EditionInfo $Edition
-    } elseif (Get-Command Get-EditionName -ErrorAction SilentlyContinue) {
-        [PSCustomObject]@{ Base = (Get-EditionName $Edition); Virtual = "" }
     } else {
         [PSCustomObject]@{ Base = $Edition; Virtual = "" }
     }
