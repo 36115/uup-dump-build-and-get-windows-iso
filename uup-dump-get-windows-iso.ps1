@@ -20,9 +20,6 @@ Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 
-$preview  = $false
-$ringLower = $null
-
 trap {
         Write-Host "ERROR: $_"
         @(($_.ScriptStackTrace -split '\r?\n') -replace '^(.*)$','ERROR: $1') | Write-Host
@@ -31,7 +28,7 @@ trap {
 }
 
 # ------------------------------
-# Log helpers + DISM bucketed progress (no aria2 parsing)
+# Log helpers + DISM bucketed progress
 # ------------------------------
 $loggingHelper = Join-Path $PSScriptRoot "Utils\Common\Write-Log.ps1"
 if (Test-Path $loggingHelper) { . $loggingHelper }
@@ -49,13 +46,27 @@ if (Test-Path $setupScript) { . $setupScript }
 $imageServicingHelper = Join-Path $PSScriptRoot "Utils\Servicing\Invoke-ImageServicing.ps1"
 if (Test-Path $imageServicingHelper) { . $imageServicingHelper }
 
-# ------------------------------
 function Get-WindowsIso($name, $destinationDirectory) {
-    $arch = Get-UupArchitecture -Architecture $architecture
+        $arch = if (Get-Command Get-UupArchitecture -ErrorAction SilentlyContinue) {
+    Get-UupArchitecture -Architecture $architecture
+        } else {
+    if ($architecture -eq "x64") { "amd64" } else { "arm64" }
+        }
+
         $preview = $false
-        $ringLower = Get-UupTargetRing -TargetName $name
+        $ringLower = if (Get-Command Get-UupTargetRing -ErrorAction SilentlyContinue) {
+    Get-UupTargetRing -TargetName $name
+        } else {
+    if ($name -match 'beta|dev|wif|canary') { @('beta','dev','wif','canary').Where({$name -match $_})[0] } else { $null }
+        }
         if ($ringLower) { $preview = $true }
-        $targetDef = Get-UupTargetDefinition -TargetName $name -Architecture $arch -Revision $revision -Edition $edition
+
+        $targetDef = if (Get-Command Get-UupTargetDefinition -ErrorAction SilentlyContinue) {
+    Get-UupTargetDefinition -TargetName $name -Architecture $arch -Revision $revision -Edition $edition
+        } else {
+    throw "Get-UupTargetDefinition not found."
+        }
+
         $iso = Get-UupDumpIso $name $targetDef
         if (-not $iso) { throw "Can't find UUP for $name ($($targetDef.search)), lang=$lang." }
 
@@ -64,12 +75,19 @@ function Get-WindowsIso($name, $destinationDirectory) {
         $virtualEdn = $edInfo.Virtual
         $effectiveEdition = if ($hasVirtualMember) { $virtualEdn } elseif ($iso.PSObject.Properties.Name -contains 'edition' -and $iso.edition) { $iso.edition } else { $targetDef.edition }
 
-        $verbuild = Get-UupVersionBuild -Title $iso.title -Build $iso.build -IsPreview $preview -Ring $ringLower
+        $verbuild = if (Get-Command Get-UupVersionBuild -ErrorAction SilentlyContinue) {
+    Get-UupVersionBuild -Title $iso.title -Build $iso.build -IsPreview $preview -Ring $ringLower
+        } else {
+    if (!$preview) { ($iso.title -split 'version\s*')[1] -split '[\s\(]' | Select-Object -First 1 } else { $ringLower.ToUpper() }
+        }
 
-        $targetDirectory = Resolve-TargetDirectory -DestinationDirectory $destinationDirectory -Architecture $architecture -Build $iso.build -FallbackVersion $verbuild
+        $targetDirectory = if (Get-Command Resolve-TargetDirectory -ErrorAction SilentlyContinue) {
+    Resolve-TargetDirectory -DestinationDirectory $destinationDirectory -Architecture $architecture -Build $iso.build -FallbackVersion $verbuild
+        } else {
+    Join-Path $destinationDirectory "Target\x86_64\$($iso.build)"
+        }
 
         $buildDirectory = Join-Path $destinationDirectory "build\$name"
-
         if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
         New-Item -ItemType Directory -Force $buildDirectory | Out-Null
 
@@ -96,7 +114,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
             Join-Path $PSScriptRoot "Config\$resolvedProfile"
         }
         $profileChain = if ($resolvedProfileDir -and (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
-    Get-ProfileHierarchy -ProfileDir $resolvedProfileDir -RepoRoot $PSScriptRoot
+    Get-ProfileHierarchy -ProfileDir $resolvedProfileDir -RepoRoot $PSScriptRoot -TargetOS $targetOS
         } else {
     @()
         }
@@ -119,17 +137,16 @@ function Get-WindowsIso($name, $destinationDirectory) {
     -ConvertConfigOverrides $convertConfigOverrides
 
         # Append profile IsoTag (e.g. .Debloat) if configured in profile hierarchy
-        $profileIsoTag = if ($profileChain -and (Get-Command Get-ProfileIsoTag -ErrorAction SilentlyContinue)) { Get-ProfileIsoTag -ProfileChain $profileChain } else { "" }
+        $profileIsoTag = if ($profileChain -and (Get-Command Get-ProfileIsoTag -ErrorAction SilentlyContinue)) {
+    Get-ProfileIsoTag -ProfileChain $profileChain
+        } else {
+    ""
+        }
         if ($profileIsoTag) { $tag += $profileIsoTag }
 
         # Patch CustomAppsList.txt if profile hierarchy specifies EnabledApps
-        $enabledApps = if ($profileChain -and (Get-Command Get-ProfileEnabledApps -ErrorAction SilentlyContinue)) {
-    Get-ProfileEnabledApps -ProfileChain $profileChain
-        } else {
-    @()
-        }
-        if ($enabledApps -and $enabledApps.Count -gt 0 -and (Get-Command Set-UupCustomAppsList -ErrorAction SilentlyContinue)) {
-    Set-UupCustomAppsList -BuildDirectory $buildDirectory -EnabledApps $enabledApps
+        if ($profileChain -and (Get-Command Initialize-UupCustomAppsList -ErrorAction SilentlyContinue)) {
+    Initialize-UupCustomAppsList -BuildDirectory $buildDirectory -ProfileChain $profileChain
         }
 
         Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
@@ -151,7 +168,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     $installWim = Resolve-ServicingWim -DistributionDirectory $distDir -WimLibPath $wimlib
 
     if ($needsServicing) {
-                        Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esd -wimOnly:$wimOnly -wimlib $wimlib -profileName $resolvedProfile
+                        Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esd -wimOnly:$wimOnly -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $PSScriptRoot
     }
 
     # If ESD was requested (and not wimOnly mode)
@@ -166,13 +183,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     New-BaseIsoMedia -SourceIsoPath $baseInput -OutputDirectory $cleanSourceIsoDir -TargetOS $targetOS -ProfileName $resolvedProfile
 
     # Copy serviced install image into the clean SourceIso media
-    $servicedInstallWim = Join-Path $distDir "sources\install.wim"
-    $servicedInstallEsd = Join-Path $distDir "sources\install.esd"
-    if (Test-Path $servicedInstallEsd) {
-                        Copy-Item -Path $servicedInstallEsd -Destination (Join-Path $cleanSourceIsoDir "sources\install.esd") -Force
-    } elseif (Test-Path $servicedInstallWim) {
-                        Copy-Item -Path $servicedInstallWim -Destination (Join-Path $cleanSourceIsoDir "sources\install.wim") -Force
-    }
+    Sync-ServicedImageToMedia -SourceDistribution $distDir -TargetMedia $cleanSourceIsoDir
     $finalMediaDir = $cleanSourceIsoDir
 
     if ($wimOnly) {
@@ -195,11 +206,12 @@ function Get-WindowsIso($name, $destinationDirectory) {
     New-IsoImage -SourceDir $finalMediaDir -DestinationIsoPath $createdIsoPath -VolumeLabel $finalIsoName -Architecture $architecture -SearchDir $buildDirectory
         }
 
-    Export-IsoArtifact -BuildDirectory $buildDirectory `
+        Export-IsoArtifact -BuildDirectory $buildDirectory `
     -TargetDirectory $targetDirectory `
     -Name $name `
     -IsoInfo $iso `
     -VersionBuild $verbuild `
-    -Tag $tag}
+    -Tag $tag
+}
 
 Get-WindowsIso $windowsTargetName $destinationDirectory
