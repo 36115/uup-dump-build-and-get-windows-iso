@@ -17,7 +17,13 @@ param(
     [string]$NSudoPath = "",
 
     [Parameter(Mandatory = $false)]
-    [string[]]$EnabledApps = @()
+    [string[]]$EnabledApps = @(),
+
+    [Parameter(Mandatory = $false)]
+    [switch]$RemoveFrameworkDependencies = $false,
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$ExcludedDependencies = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,7 +38,11 @@ if (Test-Path $inboxApps) {
 }
 
 Write-Step "Filtering Provisioned Appx Packages (preserving EnabledApps & framework runtimes)..."
-Filter-OfflineProvisionedAppxPackages -MountDir $MountDir -EnabledApps $EnabledApps
+$filterArgs = @{ MountDir = $MountDir }
+if ($PSBoundParameters.ContainsKey('EnabledApps')) { $filterArgs['EnabledApps'] = $EnabledApps }
+if ($PSBoundParameters.ContainsKey('RemoveFrameworkDependencies')) { $filterArgs['RemoveFrameworkDependencies'] = $RemoveFrameworkDependencies }
+if ($PSBoundParameters.ContainsKey('ExcludedDependencies')) { $filterArgs['ExcludedDependencies'] = $ExcludedDependencies }
+Filter-OfflineProvisionedAppxPackages @filterArgs
 
 Write-Step "Purging OneDrive Setup Binaries and Decoupling Shell Namespace..."
 $oneDriveBinaries = @(
