@@ -36,6 +36,13 @@
     # If set to $true, Windows Defender and Microsoft.SecHealthUI are purged.
     RemoveDefender = $false
 
+    # Separate Defender Editions in Setup Installer
+    # If set to $true, builds a single ISO containing two selectable install options:
+    #   1. "<Edition> (Defender)" (with Windows Defender & SecHealthUI)
+    #   2. "<Edition> (No Defender)" (with Windows Defender & SecHealthUI purged)
+    # If set to $false, builds a single edition based on RemoveDefender above.
+    SeparateDefenderEditions = $true
+
     # Force remove all framework dependencies (Microsoft.VCLibs, Microsoft.UI.Xaml, .NET.Native)
     # WARNING: Enabling this will break the remaining Store apps above because they depend on these runtimes.
     # Only enable if EnabledApps is empty (@()) and you want a 100% headless/legacy win32-only OS.

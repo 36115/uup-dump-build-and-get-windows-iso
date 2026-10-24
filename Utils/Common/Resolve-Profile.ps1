@@ -418,7 +418,9 @@ function Get-ProfileEnabledApps {
         [psobject[]]$ProfileChain
     )
 
-    $removeDefender = if (Get-Command Get-ProfileRemoveDefender -ErrorAction SilentlyContinue) {
+    $removeDefender = if ($env:FORCE_REMOVE_DEFENDER -eq 'true') {
+        $true
+    } elseif (Get-Command Get-ProfileRemoveDefender -ErrorAction SilentlyContinue) {
         Get-ProfileRemoveDefender -ProfileChain $ProfileChain
     } else {
         $false
@@ -499,6 +501,26 @@ function Get-ProfileRemoveDefender {
         $cfg = $item.Config
         if ($cfg.ContainsKey('RemoveDefender')) {
             return [bool]$cfg.RemoveDefender
+        }
+    }
+    return $false
+}
+
+function Get-ProfileSeparateDefenderEditions {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    foreach ($item in $ProfileChain) {
+        $cfg = $item.Config
+        if ($cfg.ContainsKey('SeparateDefenderEditions')) {
+            return [bool]$cfg.SeparateDefenderEditions
+        }
+        if ($cfg.ContainsKey('SeparateDefenderBuild')) {
+            return [bool]$cfg.SeparateDefenderBuild
         }
     }
     return $false
