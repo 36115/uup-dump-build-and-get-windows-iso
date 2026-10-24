@@ -863,6 +863,12 @@ function Filter-OfflineProvisionedAppxPackages {
         [string[]]$EnabledApps = @(),
 
         [Parameter(Mandatory = $false)]
+        [switch]$RemoveFrameworkDependencies = $false,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$ExcludedDependencies = @(),
+
+        [Parameter(Mandatory = $false)]
         [string[]]$ProtectedFrameworks = @(
             'Microsoft.VCLibs*',
             'Microsoft.UI.Xaml*',
@@ -898,12 +904,43 @@ function Filter-OfflineProvisionedAppxPackages {
         )
     }
 
+    if (-not $PSBoundParameters.ContainsKey('RemoveFrameworkDependencies')) {
+        if (Get-Command Get-ProfileRemoveFrameworkDependencies -ErrorAction SilentlyContinue -and (Test-Path variable:profileChain) -and $profileChain) {
+            $RemoveFrameworkDependencies = Get-ProfileRemoveFrameworkDependencies -ProfileChain $profileChain
+        } elseif ((Test-Path variable:ProfileDir) -and $ProfileDir -and (Test-Path (Join-Path $ProfileDir "profile.psd1"))) {
+            $cfg = if (Get-Command Import-ProfileManifest -ErrorAction SilentlyContinue) {
+                Import-ProfileManifest -Path (Join-Path $ProfileDir "profile.psd1") -MountDir $MountDir
+            } else {
+                Import-PowerShellDataFile -Path (Join-Path $ProfileDir "profile.psd1")
+            }
+            if ($cfg.ContainsKey('RemoveFrameworkDependencies')) {
+                $RemoveFrameworkDependencies = [bool]$cfg.RemoveFrameworkDependencies
+            }
+        }
+    }
+
+    if (-not $ExcludedDependencies -or $ExcludedDependencies.Count -eq 0) {
+        if (Get-Command Get-ProfileExcludedDependencies -ErrorAction SilentlyContinue -and (Test-Path variable:profileChain) -and $profileChain) {
+            $ExcludedDependencies = Get-ProfileExcludedDependencies -ProfileChain $profileChain
+        } elseif ((Test-Path variable:ProfileDir) -and $ProfileDir -and (Test-Path (Join-Path $ProfileDir "profile.psd1"))) {
+            $cfg = if (Get-Command Import-ProfileManifest -ErrorAction SilentlyContinue) {
+                Import-ProfileManifest -Path (Join-Path $ProfileDir "profile.psd1") -MountDir $MountDir
+            } else {
+                Import-PowerShellDataFile -Path (Join-Path $ProfileDir "profile.psd1")
+            }
+            if ($cfg.ContainsKey('ExcludedDependencies') -and $cfg.ExcludedDependencies) {
+                $ExcludedDependencies = $cfg.ExcludedDependencies
+            }
+        }
+    }
+
     Invoke-WithoutOfflineHives -MountDir $MountDir -Action {
         try {
             $provPackages = @(Get-AppxProvisionedPackage -Path $MountDir -ErrorAction SilentlyContinue)
             $removedCount = 0
             $retainedCount = 0
 
+            # Pass 1: Filter and remove unlisted user-facing apps
             foreach ($pkg in $provPackages) {
                 $isFramework = $false
                 foreach ($fw in $ProtectedFrameworks) {
@@ -913,7 +950,6 @@ function Filter-OfflineProvisionedAppxPackages {
                     }
                 }
                 if ($isFramework) {
-                    $retainedCount++
                     continue
                 }
 
@@ -933,6 +969,41 @@ function Filter-OfflineProvisionedAppxPackages {
                     if (Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -PackageName $pkg.PackageName) {
                         $removedCount++
                     }
+                }
+            }
+
+            # Pass 2: Process framework runtimes (retain unless RemoveFrameworkDependencies or ExcludedDependencies matches)
+            foreach ($pkg in $provPackages) {
+                $isFramework = $false
+                foreach ($fw in $ProtectedFrameworks) {
+                    if ($pkg.DisplayName -like $fw -or $pkg.PackageName -like $fw) {
+                        $isFramework = $true
+                        break
+                    }
+                }
+                if (-not $isFramework) {
+                    continue
+                }
+
+                $shouldRemove = $RemoveFrameworkDependencies
+                if (-not $shouldRemove -and $ExcludedDependencies -and $ExcludedDependencies.Count -gt 0) {
+                    foreach ($ex in $ExcludedDependencies) {
+                        if ($pkg.DisplayName -like "$ex*" -or $pkg.PackageName -like "$ex*") {
+                            $shouldRemove = $true
+                            break
+                        }
+                    }
+                }
+
+                if ($shouldRemove) {
+                    Write-Info "Removing framework dependency: $($pkg.DisplayName)..."
+                    if (Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -PackageName $pkg.PackageName) {
+                        $removedCount++
+                    } else {
+                        Write-Warning "Could not remove framework $($pkg.DisplayName) (likely required by an active app)."
+                    }
+                } else {
+                    $retainedCount++
                 }
             }
 
