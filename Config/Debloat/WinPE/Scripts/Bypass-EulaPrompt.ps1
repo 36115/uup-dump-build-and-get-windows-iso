@@ -30,9 +30,9 @@ Write-Host "  >>> Executing WinPE Component: Bypass-EulaPrompt..." -ForegroundCo
 
 if (-not (Get-Command Enable-WinPeSetupBypass -ErrorAction SilentlyContinue)) {
     $candidates = @(
-        (Join-Path $PSScriptRoot "..\\..\\..\\Utils\WinPE\WinPE.ps1"),
-        (Join-Path $PSScriptRoot "..\\..\\..\\..\\Utils\WinPE\WinPE.ps1"),
-        "Utils\WinPE\WinPE.ps1"
+        (Join-Path $PSScriptRoot "..\\..\\..\\Utils\WinPE\Invoke-WinPeServicing.ps1"),
+        (Join-Path $PSScriptRoot "..\\..\\..\\..\\Utils\WinPE\Invoke-WinPeServicing.ps1"),
+        "Utils\WinPE\Invoke-WinPeServicing.ps1"
     )
     foreach ($cand in $candidates) {
         if (Test-Path $cand) { . (Resolve-Path $cand).Path; break }

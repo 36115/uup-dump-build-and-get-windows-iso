@@ -128,7 +128,8 @@ function Invoke-ImageServicing {
     }
 
     $servicingScript = Join-Path $RepoRoot "Utils\Servicing\Invoke-Servicing.ps1"
-    $nsudoHelper = Join-Path $RepoRoot "Utils\NSudo\NSudo.ps1"
+    $nsudoHelper = Join-Path $RepoRoot "Utils\NSudo\Invoke-NSudo.ps1"
+    if (-not (Test-Path $nsudoHelper)) { $nsudoHelper = Join-Path $RepoRoot "Utils\NSudo\NSudo.ps1" }
     if (Test-Path $nsudoHelper) { . $nsudoHelper }
     $nsudo = if (Get-Command Get-NSudoPath -ErrorAction SilentlyContinue) { Get-NSudoPath } else { "" }
 

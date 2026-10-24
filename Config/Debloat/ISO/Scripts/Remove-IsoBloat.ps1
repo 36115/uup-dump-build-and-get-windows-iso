@@ -12,9 +12,9 @@ $ErrorActionPreference = 'Stop'
 
 if (-not (Get-Command Remove-IsoBloatItems -ErrorAction SilentlyContinue)) {
     $candidates = @(
-        (Join-Path $PSScriptRoot "..\\..\\..\\Utils\ISO\Build-Iso.ps1"),
-        (Join-Path $PSScriptRoot "..\\..\\..\\..\\Utils\ISO\Build-Iso.ps1"),
-        "Utils\ISO\Build-Iso.ps1"
+        (Join-Path $PSScriptRoot "..\\..\\..\\Utils\ISO\New-IsoImage.ps1"),
+        (Join-Path $PSScriptRoot "..\\..\\..\\..\\Utils\ISO\New-IsoImage.ps1"),
+        "Utils\ISO\New-IsoImage.ps1"
     )
     foreach ($cand in $candidates) {
         if (Test-Path $cand) { . (Resolve-Path $cand).Path; break }

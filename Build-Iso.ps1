@@ -425,7 +425,7 @@ function Invoke-WindowsIsoBuild {
     param([hashtable]$BuildCfg)
 
     # Logging helper
-    $loggingHelper = Join-Path $RepoRoot "Utils\Common\Logging.ps1"
+    $loggingHelper = Join-Path $RepoRoot "Utils\Common\Write-Log.ps1"
     if (Test-Path $loggingHelper) { . $loggingHelper }
 
     # Setup environment
@@ -433,7 +433,7 @@ function Invoke-WindowsIsoBuild {
     if (Test-Path $setupScript) { . $setupScript }
 
     # Image Servicing helper
-    $imageServicingHelper = Join-Path $RepoRoot "Utils\Servicing\ImageServicing.ps1"
+    $imageServicingHelper = Join-Path $RepoRoot "Utils\Servicing\Invoke-ImageServicing.ps1"
     if (Test-Path $imageServicingHelper) { . $imageServicingHelper }
 
     $name = $BuildCfg.Target
@@ -550,7 +550,7 @@ function Invoke-WindowsIsoBuild {
         $distDir = Resolve-DistributionDirectory -BuildDirectory $buildDirectory
         Write-CleanLine "Distribution folder located: $distDir"
 
-        $wimlibHelper = Join-Path $RepoRoot "Utils\WimLib\WimLib.ps1"
+        $wimlibHelper = Join-Path $RepoRoot "Utils\WimLib\Invoke-WimLib.ps1"
         if (Test-Path $wimlibHelper) { . $wimlibHelper }
         $wimlib = if (Get-Command Get-WimLibPath -ErrorAction SilentlyContinue) { Get-WimLibPath } else { $null }
         if ($wimlib) {

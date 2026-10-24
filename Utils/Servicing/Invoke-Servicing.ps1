@@ -67,7 +67,8 @@ if (-not (Test-Path "$MountDir\Windows\System32")) {
 
 $repo = if (Get-Command Get-RepoRoot -ErrorAction SilentlyContinue) { Get-RepoRoot } else { (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
 
-$profileHelper = Join-Path $repo "Utils\Common\Profile.ps1"
+$profileHelper = Join-Path $repo "Utils\Common\Resolve-Profile.ps1"
+if (-not (Test-Path $profileHelper)) { $profileHelper = Join-Path $repo "Utils\Common\Profile.ps1" }
 if (Test-Path $profileHelper) { . $profileHelper }
 
 # Resolve ProfileDir

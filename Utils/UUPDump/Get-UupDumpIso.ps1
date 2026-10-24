@@ -549,7 +549,8 @@ function Set-UupCustomAppsList {
     $filesDir = Join-Path $BuildDirectory "files"
     if (-not (Test-Path $filesDir)) { New-Item -ItemType Directory -Path $filesDir -Force | Out-Null }
 
-    $7zHelper = Join-Path $PSScriptRoot "..\7z\7z.ps1"
+    $7zHelper = Join-Path $PSScriptRoot "..\7z\Get-7zPath.ps1"
+    if (-not (Test-Path $7zHelper)) { $7zHelper = Join-Path $PSScriptRoot "..\7z\7z.ps1" }
     if (Test-Path $7zHelper) { . $7zHelper }
     $sevenZipPath = if (Get-Command Get-7zPath -ErrorAction SilentlyContinue) { Get-7zPath } else { $null }
 
@@ -593,7 +594,13 @@ function Invoke-UupDownloadProcess {
             $RawLogPath = Join-Path $tempDir "uup_dism_aria2_raw.log"
         }
 
-        $ariaHelper = Join-Path $PSScriptRoot "..\aria2\aria2.ps1"
+        $ariaHelper = Join-Path $PSScriptRoot "..\aria2\Get-Aria2Path.ps1"
+        if (-not (Test-Path $ariaHelper)) {
+            $ariaHelper = Join-Path $PSScriptRoot "..\aria2\aria2.ps1"
+        }
+        if (-not (Test-Path $ariaHelper)) {
+            $ariaHelper = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "Utils\aria2\Get-Aria2Path.ps1"
+        }
         if (-not (Test-Path $ariaHelper)) {
             $ariaHelper = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "Utils\aria2\aria2.ps1"
         }

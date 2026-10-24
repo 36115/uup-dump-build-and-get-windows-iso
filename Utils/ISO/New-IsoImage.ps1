@@ -508,14 +508,14 @@ function Patch-BootWim {
 
         $repoRoot = if (Get-Command Get-RepoRoot -ErrorAction SilentlyContinue) { Get-RepoRoot $PSScriptRoot } else { (Resolve-Path ".").Path }
         if (-not (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
-            $profHelper = Join-Path $PSScriptRoot "..\Common\Profile.ps1"
+            $profHelper = Join-Path $PSScriptRoot "..\Common\Resolve-Profile.ps1"
             if (-not (Test-Path $profHelper)) { $profHelper = Join-Path $repoRoot "Utils\Common\Profile.ps1" }
             if (Test-Path $profHelper) { . $profHelper }
         }
 
         # Load WinPE utility helpers
         if (-not (Get-Command Enable-Win11HardwareBypass -ErrorAction SilentlyContinue)) {
-            $winpeHelper = Join-Path $PSScriptRoot "..\WinPE\WinPE.ps1"
+            $winpeHelper = Join-Path $PSScriptRoot "..\WinPE\Invoke-WinPeServicing.ps1"
             if (-not (Test-Path $winpeHelper)) { $winpeHelper = Join-Path $repoRoot "Utils\WinPE\WinPE.ps1" }
             if (Test-Path $winpeHelper) { . $winpeHelper }
         }
@@ -709,7 +709,7 @@ function New-BaseIsoMedia {
 
         # Discover and execute ISO media scripts from profile hierarchy
         if (-not (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
-            $profHelper = Join-Path $PSScriptRoot "..\Common\Profile.ps1"
+            $profHelper = Join-Path $PSScriptRoot "..\Common\Resolve-Profile.ps1"
             if (-not (Test-Path $profHelper)) { $profHelper = Join-Path $repoRoot "Utils\Common\Profile.ps1" }
             if (Test-Path $profHelper) { . $profHelper }
         }

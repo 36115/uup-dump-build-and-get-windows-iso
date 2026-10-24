@@ -662,7 +662,7 @@ jobs:
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.profile_name }}')) {
             $aioParams['ProfileName'] = '${{ inputs.profile_name }}'
           }
-          New-AioIso @aioParams
+          New-AioIsoImage @aioParams
           echo "iso_name=$env:ISO_NAME" >> $env:GITHUB_OUTPUT
 
       - name: Create split zip
