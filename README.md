@@ -129,17 +129,19 @@ pwsh Build-Iso.ps1 windows-11@26h2 Out -architecture x64 -edition pro -lang en-u
 
 ---
 
-### Smart Base Media Caching & Fast Rebuilds
+### Smart Base Media & Package Caching (Fast Rebuilds)
 
-The build engine automatically caches pristine base Windows media (ISOs and distributions) in `Out/BaseIso/`.
+The build engine provides a **two-tier caching system** to avoid multi-gigabyte re-downloads:
 
-- **Instant Rebuilds:** If you change post-processing settings (such as servicing profiles, Defender configurations, registry tweaks, or custom setup scripts), the engine stages the cached base media directly into the build environment instead of re-downloading multi-gigabyte packages from Microsoft servers.
-- **Smart Change Detection:** A SHA256 configuration signature tracks parameters that directly impact the base image bits:
-  - Windows Target, Architecture, Edition, Language, Revision, and UUP Build UUID.
-  - Base integration flags: `.NET Framework 3.5`, `Drivers`.
-  - Impacting UUP converter settings: `SkipEdge`, `ResetBase`, `SkipWinRE`, `StartVirtual`, `wim2esd`, `CustomList` / inbox app filtration.
+1. **Tier 1 — Base ISO Cache (`Out/BaseIso/`)**:
+   - Reuses pristine pre-built Windows base ISOs immediately in **seconds** when building repeatedly or modifying post-servicing settings (e.g. `SeparateDefenderEditions`, debloat profiles, registry files, or custom scripts).
+   - Smart configuration hashing tracks impacting parameters and automatically invalidates the cache only if essential settings change.
+2. **Tier 2 — Raw UUP Package Cache (`Out/UupPackages/`)**:
+   - Preserves downloaded Microsoft update packages (`*.cab`, `*.esd`, `UpdateAgent.dll`).
+   - If you modify UUP converter settings (such as `SkipEdge`, `ResetBase`, `SkipWinRE`, `StartVirtual`, or `wim2esd`), `aria2c` verifies local checksums in 2 seconds, downloads **0 MB from Microsoft**, and UUP dump rebuilds the ISO locally in 2–3 minutes.
+
 - **Excluded Settings:** Operational settings that do NOT alter the final Windows image bytes (such as `AutoExit`, `Cleanup`, `AutoStart`, `ForceDism`, `SkipISO` packaging, and offline servicing options like `SeparateDefenderEditions`) do not invalidate the cache.
-- **Force Fresh Download:** Bypass the cache at any time using `-forceDownload` or disable caching with `-noCache`:
+- **Force Fresh Download:** Bypass both caches at any time using `-forceDownload` or disable caching with `-noCache`:
   ```powershell
   .\Build-Iso.ps1 -forceDownload
   ```
