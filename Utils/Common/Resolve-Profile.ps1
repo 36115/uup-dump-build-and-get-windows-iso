@@ -458,8 +458,8 @@ function Get-ProfileRemoveFrameworkDependencies {
         [psobject[]]$ProfileChain
     )
 
-    foreach ($item in $ProfileChain) {
-        $cfg = $item.Config
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
         if ($cfg.ContainsKey('RemoveFrameworkDependencies') -and $cfg.RemoveFrameworkDependencies) {
             return [bool]$cfg.RemoveFrameworkDependencies
         }
@@ -497,8 +497,8 @@ function Get-ProfileRemoveDefender {
         [psobject[]]$ProfileChain
     )
 
-    foreach ($item in $ProfileChain) {
-        $cfg = $item.Config
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
         if ($cfg.ContainsKey('RemoveDefender')) {
             return [bool]$cfg.RemoveDefender
         }
@@ -514,8 +514,8 @@ function Get-ProfileSeparateDefenderEditions {
         [psobject[]]$ProfileChain
     )
 
-    foreach ($item in $ProfileChain) {
-        $cfg = $item.Config
+    for ($i = $ProfileChain.Count - 1; $i -ge 0; $i--) {
+        $cfg = $ProfileChain[$i].Config
         if ($cfg.ContainsKey('SeparateDefenderEditions')) {
             return [bool]$cfg.SeparateDefenderEditions
         }
