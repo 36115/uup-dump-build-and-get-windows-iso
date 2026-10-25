@@ -67,8 +67,11 @@
     OutDir       = 'Out'
 
     # UUP Dump Download & Cache Behavior
-    # If $false, reuses existing cached base Windows media under Out/BaseIso if UUP configs haven't changed.
-    # Set to $true or pass -ForceDownload to bypass cache and redownload fresh from UUP Dump.
+    # Tier 1: Reuses cached base Windows ISOs in Out/BaseIso if UUP configs haven't changed.
+    # Tier 2: Preserves raw downloaded UUP package files (*.cab, *.esd) in Out/UupPackages.
+    #         If you tweak converter settings (e.g. SkipEdge, ResetBase), UUP dump rebuilds the ISO
+    #         locally from cached packages without re-downloading from Microsoft.
+    # Pass -ForceDownload or set ForceDownload = $true to bypass caches and download fresh from UUP Dump.
     ForceDownload = $false
 
     # Optional specific revision (leave empty '' for latest available on UUP)
