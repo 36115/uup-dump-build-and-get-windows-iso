@@ -472,7 +472,7 @@ function Invoke-WindowsIsoBuild {
 
     $verbuild = Get-UupVersionBuild -Title $iso.title -Build $iso.build -IsPreview $preview -Ring $ringLower
 
-    $targetDirectory = Resolve-TargetDirectory -DestinationDirectory $destDir -Architecture $archInput -Build $iso.build -FallbackVersion $verbuild
+    $targetDirectory = Resolve-TargetDirectory -DestinationDirectory $destDir -Architecture $archInput -Build $iso.build -FallbackVersion $verbuild -Revision $revInput
 
     $buildDirectory = Join-Path $destDir "build\$name"
     $cacheDir = Join-Path $destDir "BaseIso"
