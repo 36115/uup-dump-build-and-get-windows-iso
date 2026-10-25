@@ -797,6 +797,8 @@ function New-AioIsoImage {
         [Parameter(Mandatory = $false)]
         [string]$EditionName = 'AIO',
 
+        [Parameter(Mandatory = $false)]
+        [string[]]$SelectedEditions = @(),
 
         [Parameter(Mandatory = $false)]
         [string]$ProfileName = '',
@@ -831,6 +833,28 @@ function New-AioIsoImage {
 
     if (-not $wimFiles -or $wimFiles.Count -eq 0) {
         throw "No .wim or .esd files found in '$WimDirectory'."
+    }
+
+    if ($SelectedEditions -and $SelectedEditions.Count -gt 0) {
+        $allowedPatterns = [System.Collections.Generic.List[string]]::new()
+        foreach ($sel in $SelectedEditions) {
+            if (-not [string]::IsNullOrWhiteSpace($sel)) {
+                $ed = if (Get-Command Get-EditionInfo -ErrorAction SilentlyContinue) { Get-EditionInfo $sel } else { $null }
+                if ($ed) {
+                    if ($ed.Short) { $allowedPatterns.Add([regex]::Escape($ed.Short)) }
+                    if ($ed.Base) { $allowedPatterns.Add([regex]::Escape($ed.Base)) }
+                    if ($ed.Virtual) { $allowedPatterns.Add([regex]::Escape($ed.Virtual)) }
+                }
+                $allowedPatterns.Add([regex]::Escape($sel.ToString().Trim()))
+            }
+        }
+        $unique = $allowedPatterns | Select-Object -Unique
+        $rx = '(?i)[-_\.](' + ($unique -join '|') + ')(\.[^.]+$|[-_\.])'
+
+        $wimFiles = @($wimFiles | Where-Object { $_.Name -match $rx })
+        if (-not $wimFiles -or $wimFiles.Count -eq 0) {
+            throw "No .wim or .esd files matching selected editions ($($SelectedEditions -join ', ')) found in '$WimDirectory'."
+        }
     }
 
     if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
@@ -941,6 +965,9 @@ function New-AioIsoImage {
         default { 'x86_64' }
     }
     $buildTag = if ($buildNumber -and $buildNumber -ne "UnknownBuild") { $buildNumber } else { $verbuild }
+    if ($Revision -and $buildTag -notmatch '\.') {
+        $buildTag = "$buildTag.$Revision"
+    }
     $targetDirectory = Join-Path $DestinationDirectory "Target\$archTag\$buildTag"
     if (-not (Test-Path $targetDirectory)) {
         New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
