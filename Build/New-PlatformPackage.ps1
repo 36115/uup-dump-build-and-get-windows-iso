@@ -14,10 +14,14 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$PartsLines,
 
-    [string]$ZipName = "isoautodl.zip"
+    [string]$ZipName = ""
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($ZipName)) {
+    $ZipName = if ($env:ISO_NAME) { "$($env:ISO_NAME)-downloader.zip" } else { "iso-downloader.zip" }
+}
 
 function New-BAT {
     param([string]$destDir, [string[]]$PartsLines)
@@ -303,7 +307,8 @@ function New-SH {
 }
 
 # Main packaging flow
-$pkgDir = Join-Path $DistDir "isoautodl"
+$pkgDirName = [System.IO.Path]::GetFileNameWithoutExtension($ZipName)
+$pkgDir = Join-Path $DistDir $pkgDirName
 New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
 New-BAT -destDir $pkgDir -PartsLines $PartsLines
 New-SH -destDir $pkgDir -PartsLines $PartsLines
@@ -311,3 +316,4 @@ New-SH -destDir $pkgDir -PartsLines $PartsLines
 $zipPath = Join-Path $DistDir $ZipName
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $pkgDir '*') -DestinationPath $zipPath -Force
+Remove-Item $pkgDir -Recurse -Force -ErrorAction SilentlyContinue
