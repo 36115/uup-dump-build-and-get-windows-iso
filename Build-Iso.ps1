@@ -51,6 +51,8 @@ param(
     [switch]$wimOnly,
     [string]$sourceIso = "",
     [string]$revision = "",
+    [switch]$forceDownload,
+    [switch]$noCache,
 
     # Interactive preset and configuration switches
     [string]$Preset = "",
@@ -449,6 +451,12 @@ function Invoke-WindowsIsoBuild {
     $wimOnlyVal = [bool]$BuildCfg.WimOnly
     $revInput = $BuildCfg.Revision
     $srcIso = $BuildCfg.SourceIso
+    $forceDownloadVal = [bool]$BuildCfg.ForceDownload
+    $noCacheVal = [bool]$BuildCfg.NoCache
+
+    # UUP Dump caching engine helper
+    $cacheHelper = Join-Path $RepoRoot "Utils\UUPDump\Resolve-UupCache.ps1"
+    if (Test-Path $cacheHelper) { . $cacheHelper }
 
     $arch = if (Get-Command Get-UupArchitecture -ErrorAction SilentlyContinue) {
         Get-UupArchitecture -Architecture $archInput
@@ -491,16 +499,7 @@ function Invoke-WindowsIsoBuild {
     }
 
     $buildDirectory = Join-Path $destDir "build\$name"
-    if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
-    New-Item -ItemType Directory -Force $buildDirectory | Out-Null
-
-    $edn = if ($hasVirtualMember) { $virtualEdn } else { $effectiveEdition }
-    Write-CleanLine $edn
-    $title = "$name $edn $($iso.build)"
-
-    Write-CleanLine "Downloading the UUP dump download package for $title from $($iso.downloadPackageUrl)"
-    $virtualEd = if ($hasVirtualMember) { $virtualEdn } else { "" }
-    Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
+    $cacheDir = Join-Path $destDir "BaseIso"
 
     $osFamily = if ($name -match '(?i)win(dows)?[-_\s]?10') { 'Win10' } else { 'Win11' }
     $resolvedProfile = if ($profInput) { $profInput } else { "$osFamily/Default" }
@@ -520,29 +519,92 @@ function Invoke-WindowsIsoBuild {
         @{}
     }
 
-    $iniFile = Join-Path $buildDirectory 'ConvertConfig.ini'
-    $tag = Set-UupConvertConfig -ConfigFile $iniFile `
-        -Esd:$esdVal `
-        -Drivers:$driversVal `
-        -Architecture $arch `
-        -DriversSourceDir (Join-Path $RepoRoot "Drivers") `
-        -DriversDestDir (Join-Path $buildDirectory 'Drivers') `
-        -NetFx3:$netfx3Val `
-        -VirtualEdition $virtualEd `
-        -WimOnly:$wimOnlyVal `
-        -ConvertConfigOverrides $convertConfigOverrides
+    $needsServicing = [bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')
+    $virtualEd = if ($hasVirtualMember) { $virtualEdn } else { "" }
+
+    $uupConfigInfo = if (Get-Command Get-UupImpactingConfig -ErrorAction SilentlyContinue) {
+        Get-UupImpactingConfig -BuildCfg $BuildCfg `
+            -IsoInfo $iso `
+            -ConvertConfigOverrides $convertConfigOverrides `
+            -VirtualEdition $virtualEd `
+            -ProfileChain $profileChain `
+            -RepoRoot $RepoRoot
+    } else {
+        $null
+    }
+
+    $cachedMedia = if ($uupConfigInfo -and -not $forceDownloadVal -and -not $noCacheVal -and (Get-Command Find-CachedUupMedia -ErrorAction SilentlyContinue)) {
+        Find-CachedUupMedia -CacheDir $cacheDir -ConfigInfo $uupConfigInfo
+    } else {
+        $null
+    }
+
+    $edn = if ($hasVirtualMember) { $virtualEdn } else { $effectiveEdition }
+    Write-CleanLine $edn
+    $title = "$name $edn $($iso.build)"
+
+    $tag = ""
+    if ($cachedMedia) {
+        Write-CleanLine "[CACHE HIT] Reusing cached base Windows media: $($cachedMedia.Path)"
+        Write-CleanLine "UUP Dump configuration has not changed. Skipping UUP download and conversion."
+
+        Restore-CachedUupMedia `
+            -CachedMedia $cachedMedia `
+            -BuildDirectory $buildDirectory `
+            -NeedsServicing:$needsServicing `
+            -WimOnly:$wimOnlyVal `
+            -RepoRoot $RepoRoot
+
+        if ($esdVal) { $tag += ".E" }
+        if ($driversVal -and $arch -ne "arm64") { $tag += ".D" }
+        if ($netfx3Val) { $tag += ".N" }
+    } else {
+        if ($uupConfigInfo -and (Get-Command Get-UupCacheDiffReason -ErrorAction SilentlyContinue)) {
+            $diffReason = Get-UupCacheDiffReason -CacheDir $cacheDir -ConfigInfo $uupConfigInfo
+            if ($forceDownloadVal -or $noCacheVal) {
+                Write-CleanLine "[UUP DUMP] Force download requested. Downloading fresh from UUP Dump..."
+            } elseif ($diffReason) {
+                Write-CleanLine "[CACHE MISS] UUP Dump configuration changed ($diffReason). Redownloading from UUP Dump..."
+            } else {
+                Write-CleanLine "[CACHE MISS] No cached base Windows media found for $title. Downloading from UUP Dump..."
+            }
+        }
+
+        if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
+        New-Item -ItemType Directory -Force $buildDirectory | Out-Null
+
+        Write-CleanLine "Downloading the UUP dump download package for $title from $($iso.downloadPackageUrl)"
+        Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
+
+        $iniFile = Join-Path $buildDirectory 'ConvertConfig.ini'
+        $tag = Set-UupConvertConfig -ConfigFile $iniFile `
+            -Esd:$esdVal `
+            -Drivers:$driversVal `
+            -Architecture $arch `
+            -DriversSourceDir (Join-Path $RepoRoot "Drivers") `
+            -DriversDestDir (Join-Path $buildDirectory 'Drivers') `
+            -NetFx3:$netfx3Val `
+            -VirtualEdition $virtualEd `
+            -WimOnly:$wimOnlyVal `
+            -ConvertConfigOverrides $convertConfigOverrides
+
+        if ($profileChain -and (Get-Command Initialize-UupCustomAppsList -ErrorAction SilentlyContinue)) {
+            Initialize-UupCustomAppsList -BuildDirectory $buildDirectory -ProfileChain $profileChain
+        }
+
+        Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
+        Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
+
+        # Cache the resulting base media for future builds
+        if ($uupConfigInfo -and (Get-Command Save-CachedUupMedia -ErrorAction SilentlyContinue)) {
+            Save-CachedUupMedia -BuildDirectory $buildDirectory -CacheDir $cacheDir -ConfigInfo $uupConfigInfo -RepoRoot $RepoRoot
+        }
+    }
 
     if ($profileChain -and (Get-Command Get-ProfileIsoTag -ErrorAction SilentlyContinue)) {
         $profileIsoTag = Get-ProfileIsoTag -ProfileChain $profileChain
         if ($profileIsoTag) { $tag += $profileIsoTag }
     }
-
-    if ($profileChain -and (Get-Command Initialize-UupCustomAppsList -ErrorAction SilentlyContinue)) {
-        Initialize-UupCustomAppsList -BuildDirectory $buildDirectory -ProfileChain $profileChain
-    }
-
-    Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
-    Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
 
     $needsServicing = [bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')
     if ($needsServicing -or $wimOnlyVal) {
@@ -648,6 +710,8 @@ if ($esd) { $cfg.Esd = $true }
 if ($drivers) { $cfg.Drivers = $true }
 if ($netfx3) { $cfg.NetFx3 = $true }
 if ($wimOnly) { $cfg.WimOnly = $true }
+if ($forceDownload) { $cfg.ForceDownload = $true }
+if ($noCache) { $cfg.NoCache = $true }
 
 if ($ShowConfig) {
     Show-ActiveBuildConfig -Config $cfg
