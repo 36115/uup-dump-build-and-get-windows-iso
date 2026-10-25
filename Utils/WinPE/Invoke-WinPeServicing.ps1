@@ -104,6 +104,16 @@ function Patch-BinaryPattern {
         Set-ItemProperty -Path $FilePath -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
         & attrib.exe -r $FilePath *> $null
 
+        # OS version guard: Windows 11 setup bypass patterns do not apply to Windows 10
+        try {
+            $verInfo = (Get-Item $FilePath).VersionInfo
+            $buildPart = if ($verInfo.ProductBuildPart) { $verInfo.ProductBuildPart } else { $verInfo.FileBuildPart }
+            if ($buildPart -and $buildPart -lt 22000) {
+                Write-Host "      [INFO] '$FilePath' is Windows 10 (Build $buildPart). Setup bypass ($Description) is only applicable to Windows 11." -ForegroundColor Gray
+                return $false
+            }
+        } catch { }
+
         $bytes = [System.IO.File]::ReadAllBytes($FilePath)
 
         # Architecture guard: skip x86_64 bytecode patterns on ARM/ARM64 targets
@@ -112,13 +122,30 @@ function Patch-BinaryPattern {
             Write-Host "      [INFO] '$FilePath' is $arch architecture. Skipping x86_64 binary pattern ($Description)." -ForegroundColor Gray
             return $false
         }
+
+        # Check if already patched
+        if ($AlreadyPatched) {
+            $alreadyLen = $AlreadyPatched.Length
+            $maxAlreadyIdx = $bytes.Length - $alreadyLen
+            for ($i = 0; $i -le $maxAlreadyIdx; $i++) {
+                $alreadyMatch = $true
+                for ($a = 0; $a -lt $alreadyLen; $a++) {
+                    if ($bytes[$i + $a] -ne $AlreadyPatched[$a]) {
+                        $alreadyMatch = $false
+                        break
+                    }
+                }
+                if ($alreadyMatch) {
+                    Write-Host "      [INFO] '$FilePath' is already patched ($Description active)." -ForegroundColor Gray
+                    return $true
+                }
+            }
+        }
+
         $patLen  = $Pattern.Length
         $reqLen  = [math]::Max($patLen, ($PatchOffset + $Replacement.Length))
         if ($VerifyPattern) {
             $reqLen = [math]::Max($reqLen, ($PatchOffset + $VerifyPattern.Length))
-        }
-        if ($AlreadyPatched) {
-            $reqLen = [math]::Max($reqLen, ($PatchOffset + $AlreadyPatched.Length))
         }
         $maxIdx  = $bytes.Length - $reqLen
 
@@ -140,43 +167,23 @@ function Patch-BinaryPattern {
                             break
                         }
                     }
-                    if ($verifyMatch) {
-                        for ($k = 0; $k -lt $Replacement.Length; $k++) {
-                            $bytes[$i + $PatchOffset + $k] = $Replacement[$k]
-                        }
-                        [System.IO.File]::WriteAllBytes($FilePath, $bytes)
-                        Write-Host "      [OK] Patched '$FilePath' at offset 0x$(($i + $PatchOffset).ToString('X')): $Description applied unconditionally." -ForegroundColor Green
-                        return $true
+                    if (-not $verifyMatch) {
+                        continue
                     }
-                } else {
-                    for ($k = 0; $k -lt $Replacement.Length; $k++) {
-                        $bytes[$i + $PatchOffset + $k] = $Replacement[$k]
-                    }
-                    [System.IO.File]::WriteAllBytes($FilePath, $bytes)
-                    Write-Host "      [OK] Patched '$FilePath' at offset 0x$(($i + $PatchOffset).ToString('X')): $Description applied unconditionally." -ForegroundColor Green
-                    return $true
                 }
 
-                # Check if already patched
-                if ($AlreadyPatched) {
-                    $alreadyMatch = $true
-                    $checkOffset = if ($VerifyPattern) { $PatchOffset } else { 0 }
-                    for ($a = 0; $a -lt $AlreadyPatched.Length; $a++) {
-                        if ($bytes[$i + $checkOffset + $a] -ne $AlreadyPatched[$a]) {
-                            $alreadyMatch = $false
-                            break
-                        }
-                    }
-                    if ($alreadyMatch) {
-                        Write-Host "      [INFO] '$FilePath' is already patched ($Description active)." -ForegroundColor Gray
-                        return $true
-                    }
+                for ($k = 0; $k -lt $Replacement.Length; $k++) {
+                    $bytes[$i + $PatchOffset + $k] = $Replacement[$k]
                 }
+                [System.IO.File]::WriteAllBytes($FilePath, $bytes)
+                Write-Host "      [OK] Patched '$FilePath' at offset 0x$(($i + $PatchOffset).ToString('X')): $Description applied unconditionally." -ForegroundColor Green
+                return $true
             }
         }
-        Write-Warning "Target instruction pattern for $Description not found in '$FilePath'."
+
+        Write-Host "      [INFO] Target instruction pattern for $Description not found in '$FilePath' (skipped)." -ForegroundColor Gray
     } catch {
-        Write-Warning "Failed to patch '$FilePath': $_"
+        Write-Host "      [INFO] Could not apply $Description to '$FilePath': $($_.Exception.Message)" -ForegroundColor Gray
     }
     return $false
 }
