@@ -21,23 +21,19 @@ function Get-7zPath {
     $repoRoot = if (Get-Command Get-RepoRoot -ErrorAction SilentlyContinue) {
         Get-RepoRoot $PSScriptRoot
     } else {
-        $r = $PSScriptRoot
-        while ($r -and -not (Test-Path (Join-Path $r ".git"))) {
-            $p = Split-Path $r -Parent
-            if ($p -eq $r) { break }
-            $r = $p
-        }
-        if (-not $r -or -not (Test-Path (Join-Path $r ".git"))) {
-            $r = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-        }
-        $r
+        (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
     }
 
     $candidate7z = @(
+        (Join-Path $repoRoot "External\7za\7z.exe"),
         (Join-Path $repoRoot "External\7za\7za.exe"),
+        (Join-Path $repoRoot "External\7z\7z.exe"),
         (Join-Path $repoRoot "External\7z\7za.exe"),
+        (Join-Path $repoRoot "External\7z\$hostArch\7z.exe"),
+        (Join-Path $PSScriptRoot "windows-$hostArch\7z.exe"),
         (Join-Path $PSScriptRoot "windows-x64\7za.exe"),
         (Join-Path $PSScriptRoot "7za.exe"),
+        (Join-Path $PSScriptRoot "7z.exe"),
         (Join-Path $PSScriptRoot "..\..\External\7za\7za.exe")
     )
     foreach ($cand in $candidate7z) {
@@ -58,28 +54,47 @@ function Get-7zPath {
         return "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
     }
 
-    # Target: External\7za\7za.exe
+    # Target: External\7za
     $targetDir = Join-Path $repoRoot "External\7za"
     if (-not (Test-Path $targetDir)) {
         New-Item -ItemType Directory -Path $targetDir -Force -ErrorAction SilentlyContinue | Out-Null
     }
 
-    $targetExe = Join-Path $targetDir "7za.exe"
-    if (Test-Path $targetExe -PathType Leaf) {
-        return (Resolve-Path $targetExe).Path
+    $target7z = Join-Path $targetDir "7z.exe"
+    $target7za = Join-Path $targetDir "7za.exe"
+    if (Test-Path $target7z -PathType Leaf) {
+        return (Resolve-Path $target7z).Path
+    }
+    if (Test-Path $target7za -PathType Leaf) {
+        return (Resolve-Path $target7za).Path
     }
 
-    Write-Host "Downloading standalone 7za from 7-zip.org..." -ForegroundColor Cyan
-    $url = "https://www.7-zip.org/a/7zr.exe"
+    Write-Host "Downloading native 7-Zip for Windows ($hostArch)..." -ForegroundColor Cyan
+    $tag = Get-LatestGitHubTag "ip7z/7zip" "26.05"
+    $ver = $tag -replace '\.'
+    $installerUrl = "https://github.com/ip7z/7zip/releases/download/$tag/7z$ver-$hostArch.exe"
+
+    $tempSetup = Join-Path $env:TEMP "7z_setup_$([System.IO.Path]::GetRandomFileName()).exe"
     try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $url -OutFile $targetExe -UseBasicParsing
-    } catch {
-        Write-Warning "Failed to download 7za: $_"
+        if (Save-RemoteFile -Uri $installerUrl -DestinationFile $tempSetup) {
+            $proc = Start-Process -FilePath $tempSetup -ArgumentList "/S", "/D=$targetDir" -Wait -PassThru
+            if (Test-Path $target7z -PathType Leaf) {
+                if (-not (Test-Path $target7za)) {
+                    Copy-Item -Path $target7z -Destination $target7za -Force -ErrorAction SilentlyContinue
+                }
+                return (Resolve-Path $target7z).Path
+            }
+        }
+    } finally {
+        if (Test-Path $tempSetup) { Remove-Item $tempSetup -Force -ErrorAction SilentlyContinue }
     }
 
-    if (Test-Path $targetExe -PathType Leaf) {
-        return (Resolve-Path $targetExe).Path
+    # Fallback to standalone 7zr
+    Write-Host "Falling back to standalone 7za..." -ForegroundColor Yellow
+    if (Save-RemoteFile -Uri "https://www.7-zip.org/a/7zr.exe" -DestinationFile $target7za) {
+        if (Test-Path $target7za -PathType Leaf) {
+            return (Resolve-Path $target7za).Path
+        }
     }
 
     return $null
