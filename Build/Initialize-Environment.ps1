@@ -106,7 +106,7 @@ if (Get-Command Get-WimLibPath -ErrorAction SilentlyContinue) {
             if (-not $pathsToAdd.Contains($dir)) { $pathsToAdd.Add($dir) }
         }
     } catch {
-        Write-Warning "WimLib setup failed: $_"
+        Write-Host "      [INFO] WimLib setup deferred: $($_.Exception.Message)" -ForegroundColor Gray
     }
 }
 
