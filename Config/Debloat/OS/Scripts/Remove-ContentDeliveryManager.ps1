@@ -27,8 +27,7 @@ foreach ($app in $cdmApps) {
 }
 
 Remove-ScheduledTask "\Microsoft\Windows\ContentDeliveryManager"
-Remove-ScheduledTask "\Microsoft\Windows\CloudExperienceHost\CreateObjectTask"
-Write-Success "Purged ContentDeliveryManager and CloudExperienceHost scheduled tasks."
+Write-Success "Purged ContentDeliveryManager scheduled tasks."
 $inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
 foreach ($k in (Get-RegSubKey $inboxAppsKey "ContentDeliveryManager")) {
     Remove-RegKey $k
