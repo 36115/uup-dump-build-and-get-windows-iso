@@ -570,7 +570,12 @@ function Invoke-WindowsIsoBuild {
         @{}
     }
 
-    $needsServicing = [bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')
+    $isSeparateDefender = $separateDefenderVal
+    if (-not $isSeparateDefender -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
+        $isSeparateDefender = Get-ProfileSeparateDefenderEditions -ProfileChain $profileChain
+    }
+
+    $needsServicing = ([bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')) -or $isSeparateDefender
     $virtualEd = if ($hasVirtualMember) { $virtualEdn } else { "" }
 
     $uupConfigInfo = if (Get-Command Get-UupImpactingConfig -ErrorAction SilentlyContinue) {
@@ -676,7 +681,7 @@ function Invoke-WindowsIsoBuild {
         if ($profileIsoTag) { $tag += $profileIsoTag }
     }
 
-    $needsServicing = [bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')
+    $needsServicing = ([bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')) -or $isSeparateDefender
     if ($needsServicing -or $wimOnlyVal) {
         Write-CleanLine "Locating distribution folder..."
         $distDir = Resolve-DistributionDirectory -BuildDirectory $buildDirectory
@@ -692,7 +697,7 @@ function Invoke-WindowsIsoBuild {
         $installWim = Resolve-ServicingWim -DistributionDirectory $distDir -WimLibPath $wimlib
 
         if ($needsServicing) {
-            Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esdVal -wimOnly:$wimOnlyVal -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $RepoRoot -separateDefenderEditions:$separateDefenderVal
+            Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esdVal -wimOnly:$wimOnlyVal -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $RepoRoot -separateDefenderEditions:$isSeparateDefender
         }
 
         if ($esdVal -and -not $wimOnlyVal) {
