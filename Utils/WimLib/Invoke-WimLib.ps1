@@ -250,6 +250,10 @@ function Clone-WindowsWimImage {
     if ($WimLibPath -and (Test-Path $WimLibPath)) {
         & $WimLibPath export $ImagePath $SourceIndex $ImagePath "$DestinationName" "$DestinationDescription"
         if ($LASTEXITCODE -ne 0) { throw "wimlib export clone failed on $ImagePath index $SourceIndex with exit code $LASTEXITCODE" }
+        $newIndex = @(Get-WindowsImage -ImagePath $ImagePath).Count
+        if ($newIndex -gt 0) {
+            Set-WimImageInfo -ImagePath $ImagePath -Index $newIndex -NewName $DestinationName -NewDescription $DestinationDescription -WimLibPath $WimLibPath
+        }
     } else {
         $dir = Split-Path $ImagePath -Parent
         $tempClone = Join-Path $dir "clone_$([System.IO.Path]::GetRandomFileName()).wim"
@@ -281,11 +285,17 @@ function Set-WimImageInfo {
 
     if (-not $WimLibPath) { $WimLibPath = Get-WimLibPath }
     if ($WimLibPath -and (Test-Path $WimLibPath)) {
-        if ($NewDescription) {
-            & $WimLibPath info $ImagePath $Index "$NewName" "$NewDescription"
-        } else {
-            & $WimLibPath info $ImagePath $Index "$NewName"
-        }
+        $desc = if ($NewDescription) { $NewDescription } else { $NewName }
+        $argsList = @(
+            "info",
+            $ImagePath,
+            $Index,
+            $NewName,
+            $desc,
+            "--image-property", "DISPLAYNAME=$NewName",
+            "--image-property", "DISPLAYDESCRIPTION=$desc"
+        )
+        & $WimLibPath @argsList
         if ($LASTEXITCODE -ne 0) { throw "wimlib info failed to update metadata on $ImagePath index $Index with exit code $LASTEXITCODE" }
     }
 }
