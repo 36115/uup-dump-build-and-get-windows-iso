@@ -421,3 +421,155 @@ function Restore-CachedUupMedia {
         Copy-Item -Path $mediaPath -Destination $distDir -Recurse -Force
     }
 }
+
+function Get-UupPackageCacheDir {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DestDir,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$ConfigInfo
+    )
+
+    $targetSafe = ($ConfigInfo.Target -replace '[^\w\.-]', '_')
+    $archSafe = $ConfigInfo.Architecture
+    $edSafe = $ConfigInfo.Edition
+    $langSafe = $ConfigInfo.Language
+    $uupUuid = if ($ConfigInfo.UupUuid) { $ConfigInfo.UupUuid } else { "default" }
+
+    $pkgKey = "${targetSafe}_${edSafe}_${archSafe}_${langSafe}_${uupUuid}"
+    return Join-Path $DestDir "UupPackages\$pkgKey"
+}
+
+function Disconnect-UupPackageCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory
+    )
+
+    $uupDir = Join-Path $BuildDirectory "uup"
+    if (Test-Path $uupDir) {
+        try {
+            $item = Get-Item -LiteralPath $uupDir -Force -ErrorAction SilentlyContinue
+            if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                cmd /c rmdir "$uupDir" 2>&1 | Out-Null
+            }
+        } catch {
+            cmd /c rmdir "$uupDir" 2>&1 | Out-Null
+        }
+    }
+}
+
+function Initialize-UupPackageCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$PackageCacheDir,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$Force = $false
+    )
+
+    if ($Force -and (Test-Path $PackageCacheDir)) {
+        if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+            Write-CleanLine "[UUP Cache] Force download: Purging raw package cache at $PackageCacheDir..."
+        } else {
+            Write-Host "[UUP Cache] Force download: Purging raw package cache at $PackageCacheDir..." -ForegroundColor Yellow
+        }
+        Remove-Item -Path $PackageCacheDir -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    if (-not (Test-Path $PackageCacheDir)) {
+        New-Item -ItemType Directory -Path $PackageCacheDir -Force | Out-Null
+    }
+
+    $existingPkgs = Get-ChildItem -Path $PackageCacheDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in '.cab', '.esd' }
+    $pkgCount = if ($existingPkgs) { $existingPkgs.Count } else { 0 }
+
+    if ($pkgCount -gt 0) {
+        if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+            Write-CleanLine "[UUP Cache] Found $pkgCount cached raw UUP packages in $PackageCacheDir. Aria2 will verify existing files without re-downloading."
+        } else {
+            Write-Host "[UUP Cache] Found $pkgCount cached raw UUP packages in $PackageCacheDir. Aria2 will verify existing files without re-downloading." -ForegroundColor Green
+        }
+    }
+
+    $uupDir = Join-Path $BuildDirectory "uup"
+    Disconnect-UupPackageCache -BuildDirectory $BuildDirectory
+
+    if (Test-Path $uupDir) {
+        Remove-Item -Path $uupDir -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    # Try creating directory junction for instant zero-copy access
+    $isLinked = $false
+    try {
+        $null = cmd /c mklink /J "$uupDir" "$PackageCacheDir" 2>&1
+        if (Test-Path $uupDir) {
+            $isLinked = $true
+        }
+    } catch {
+        $isLinked = $false
+    }
+
+    if ($isLinked) {
+        if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+            Write-CleanLine "[UUP Cache] Linked build UUP folder to raw package cache (Junction)."
+        }
+    } else {
+        # Fallback to copy if junction is not supported
+        New-Item -ItemType Directory -Path $uupDir -Force | Out-Null
+        if ($pkgCount -gt 0) {
+            if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+                Write-CleanLine "[UUP Cache] Staging $pkgCount cached packages to $uupDir..."
+            }
+            Copy-Item -Path "$PackageCacheDir\*" -Destination $uupDir -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    return [PSCustomObject]@{
+        PackageCacheDir = $PackageCacheDir
+        UupDir          = $uupDir
+        IsLinked        = $isLinked
+        PackageCount    = $pkgCount
+    }
+}
+
+function Sync-UupPackageCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$PackageCacheDir
+    )
+
+    $uupDir = Join-Path $BuildDirectory "uup"
+    if (-not (Test-Path $uupDir)) { return }
+
+    # If it's already a junction, files were downloaded directly into $PackageCacheDir
+    $item = Get-Item -LiteralPath $uupDir -Force -ErrorAction SilentlyContinue
+    if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        return
+    }
+
+    # If it was a normal directory (fallback copy mode), copy newly downloaded .cab/.esd files into cache
+    if (-not (Test-Path $PackageCacheDir)) {
+        New-Item -ItemType Directory -Path $PackageCacheDir -Force | Out-Null
+    }
+    $downloaded = Get-ChildItem -Path $uupDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in '.cab', '.esd' }
+    foreach ($file in $downloaded) {
+        $dest = Join-Path $PackageCacheDir $file.Name
+        if (-not (Test-Path $dest)) {
+            Copy-Item -Path $file.FullName -Destination $dest -Force
+        }
+    }
+}
