@@ -34,7 +34,7 @@ param(
     [string]$architecture = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$edition = "",
+    $edition = $null,
 
     [Parameter(Mandatory = $false)]
     [string]$lang = "",
@@ -45,6 +45,9 @@ param(
     [Parameter(Mandatory = $false)]
     [ValidateSet('Both', 'Remove', 'Keep', '')][string]$defenderBuild = "",
     [switch]$separateDefenderEditions,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$BuildAio,
 
     [switch]$esd,
     [switch]$drivers,
@@ -235,6 +238,42 @@ function Resolve-ActiveConfigFile {
     return $defaultConfig
 }
 
+function Resolve-Editions {
+    param([object]$EditionInput)
+
+    if ($null -eq $EditionInput) {
+        return ,@('pro')
+    }
+
+    if ($EditionInput -is [System.Collections.IEnumerable] -and $EditionInput -isnot [string]) {
+        $list = [System.Collections.Generic.List[string]]::new()
+        foreach ($item in $EditionInput) {
+            if ($item) {
+                $trimmed = $item.ToString().Trim()
+                if ($trimmed) { $list.Add($trimmed) }
+            }
+        }
+        if ($list.Count -gt 0) {
+            return ,$list.ToArray()
+        }
+        return ,@('pro')
+    }
+
+    $raw = $EditionInput.ToString().Trim()
+    if ($raw -match ',') {
+        $parts = @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if ($parts.Count -gt 0) {
+            return ,$parts
+        }
+    }
+
+    if ($raw) {
+        return ,@($raw)
+    }
+
+    return ,@('pro')
+}
+
 function Get-ActiveBuildConfig {
     param([string]$Path)
     $cfgFile = Resolve-ActiveConfigFile $Path
@@ -251,6 +290,12 @@ function Get-ActiveBuildConfig {
     if (-not $cfg.ContainsKey('Target') -or -not $cfg.Target) { $cfg.Target = 'windows-11@26h2' }
     if (-not $cfg.ContainsKey('Architecture') -or -not $cfg.Architecture) { $cfg.Architecture = 'x64' }
     if (-not $cfg.ContainsKey('Edition') -or -not $cfg.Edition) { $cfg.Edition = 'pro' }
+    $resolvedEdns = Resolve-Editions -EditionInput $cfg.Edition
+    if (-not $cfg.ContainsKey('BuildAio')) {
+        $cfg.BuildAio = ($resolvedEdns.Count -gt 1)
+    } else {
+        $cfg.BuildAio = [bool]$cfg.BuildAio
+    }
     if (-not $cfg.ContainsKey('Language') -or -not $cfg.Language) { $cfg.Language = 'en-us' }
     if (-not $cfg.ContainsKey('ProfileName')) { $cfg.ProfileName = 'Debloat' }
     if (-not $cfg.ContainsKey('SeparateDefenderEditions')) { $cfg.SeparateDefenderEditions = $true }
@@ -269,10 +314,18 @@ function Set-ActiveBuildConfig {
         [string]$TargetFile = (Join-Path $RepoRoot "BuildConfig.psd1")
     )
     $valSeparate = if ($Config.SeparateDefenderEditions) { '$true' } else { '$false' }
+    $valBuildAio = if ($Config.BuildAio) { '$true' } else { '$false' }
     $valEsd = if ($Config.Esd) { '$true' } else { '$false' }
     $valDrivers = if ($Config.Drivers) { '$true' } else { '$false' }
     $valNetFx3 = if ($Config.NetFx3) { '$true' } else { '$false' }
     $valWimOnly = if ($Config.WimOnly) { '$true' } else { '$false' }
+
+    $valEdition = if ($Config.Edition -is [System.Collections.IEnumerable] -and $Config.Edition -isnot [string]) {
+        $items = @($Config.Edition) | ForEach-Object { "'$_'" }
+        "@(" + ($items -join ", ") + ")"
+    } else {
+        "'$($Config.Edition)'"
+    }
 
     $sb = [System.Text.StringBuilder]::new()
     [void]$sb.AppendLine("@{")
@@ -282,10 +335,11 @@ function Set-ActiveBuildConfig {
     [void]$sb.AppendLine("    # =========================================================================")
     [void]$sb.AppendLine("    Target       = '$($Config.Target)'")
     [void]$sb.AppendLine("    Architecture = '$($Config.Architecture)'")
-    [void]$sb.AppendLine("    Edition      = '$($Config.Edition)'")
+    [void]$sb.AppendLine("    Edition      = $valEdition")
     [void]$sb.AppendLine("    Language     = '$($Config.Language)'")
     [void]$sb.AppendLine("    ProfileName  = '$($Config.ProfileName)'")
     [void]$sb.AppendLine("    SeparateDefenderEditions = $valSeparate")
+    [void]$sb.AppendLine("    BuildAio     = $valBuildAio")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("    Esd          = $valEsd")
     [void]$sb.AppendLine("    Drivers      = $valDrivers")
@@ -301,13 +355,23 @@ function Set-ActiveBuildConfig {
 function Show-ActiveBuildConfig {
     param([hashtable]$Config)
     $profText = if ($Config.ProfileName) { $Config.ProfileName } else { '(None - Vanilla)' }
+    $resolvedEdns = Resolve-Editions -EditionInput $Config.Edition
+    $edText = $resolvedEdns -join ', '
+    $modeText = if ($resolvedEdns.Count -gt 1) {
+        if ($Config.BuildAio) { "All-In-One (AIO) Combined ISO" } else { "Separated Standalone ISOs" }
+    } else {
+        "Standalone ISO"
+    }
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Cyan
     Write-Host "                   Windows ISO Build Environment" -ForegroundColor Cyan
     Write-Host "========================================================================" -ForegroundColor Cyan
     Write-Host ("  Windows Target:    {0}" -f $Config.Target) -ForegroundColor Yellow
     Write-Host ("  Architecture:      {0}" -f $Config.Architecture) -ForegroundColor Yellow
-    Write-Host ("  Edition:           {0}" -f $Config.Edition) -ForegroundColor Yellow
+    Write-Host ("  Edition(s):        {0}" -f $edText) -ForegroundColor Yellow
+    if ($resolvedEdns.Count -gt 1) {
+        Write-Host ("  Multi-Edition Mode:{0}" -f $modeText) -ForegroundColor Yellow
+    }
     Write-Host ("  Language:          {0}" -f $Config.Language) -ForegroundColor Yellow
     Write-Host ("  Servicing Profile: {0}" -f $profText) -ForegroundColor Yellow
     Write-Host ("  Separate Defender Editions: {0}" -f $Config.SeparateDefenderEditions) -ForegroundColor Yellow
@@ -384,6 +448,10 @@ function Show-BuildPresetMenu {
 
         $inEd = Read-Host "Edition (pro, core, multi, enterprise, iotenterprise) [$($cfg.Edition)]"
         if ($inEd) { $cfg.Edition = $inEd }
+
+        $aioPromptDef = if ($cfg.BuildAio) { 'y' } else { 'n' }
+        $inAio = Read-Host "Build All-In-One (AIO) combined ISO if multiple editions? (y/n) [$aioPromptDef]"
+        if ($inAio) { $cfg.BuildAio = ($inAio -match '^[Yy]') }
 
         $inLang = Read-Host "Language [$($cfg.Language)]"
         if ($inLang) { $cfg.Language = $inLang }
@@ -661,7 +729,7 @@ function Invoke-WindowsIsoBuild {
         if ($wimOnlyVal) {
             Export-WimOnlyArtifact -distDir $distDir -cleanSourceIsoDir $cleanSourceIsoDir -targetDirectory $targetDirectory -buildDirectory $buildDirectory `
                 -name $name -editionShort $edInfo.Short -build $iso.build -verbuild $verbuild -tag $tag
-            return
+            return $targetDirectory
         }
 
         $finalIsoName = if ($needsServicing) {
@@ -680,6 +748,7 @@ function Invoke-WindowsIsoBuild {
         -IsoInfo $iso `
         -VersionBuild $verbuild `
         -Tag $tag
+    return $targetDirectory
 }
 
 # -----------------------------------------------------------------------------
@@ -699,7 +768,8 @@ if ($ListPresets) {
 $hasDirectArgs = ($PSBoundParameters.ContainsKey('windowsTargetName') -and $windowsTargetName) -or
     ($PSBoundParameters.ContainsKey('destinationDirectory') -and $destinationDirectory) -or
     ($PSBoundParameters.ContainsKey('architecture') -and $architecture) -or
-    ($PSBoundParameters.ContainsKey('edition') -and $edition)
+    ($PSBoundParameters.ContainsKey('edition') -and $edition) -or
+    $PSBoundParameters.ContainsKey('BuildAio')
 
 if ($Menu -or ($Preset -and -not $hasDirectArgs)) {
     $cfg = Show-BuildPresetMenu -RequestedPreset $Preset
@@ -721,7 +791,17 @@ if ($Menu -or ($Preset -and -not $hasDirectArgs)) {
 if ($PSBoundParameters.ContainsKey('windowsTargetName') -and $windowsTargetName) { $cfg.Target = $windowsTargetName }
 if ($PSBoundParameters.ContainsKey('destinationDirectory') -and $destinationDirectory) { $cfg.OutDir = $destinationDirectory }
 if ($PSBoundParameters.ContainsKey('architecture') -and $architecture) { $cfg.Architecture = $architecture }
-if ($PSBoundParameters.ContainsKey('edition') -and $edition) { $cfg.Edition = $edition }
+if ($PSBoundParameters.ContainsKey('edition') -and $edition) {
+    $cliEditions = Resolve-Editions -EditionInput $edition
+    if ($cliEditions.Count -eq 1) {
+        $cfg.Edition = $cliEditions[0]
+    } else {
+        $cfg.Edition = @($cliEditions)
+    }
+}
+if ($PSBoundParameters.ContainsKey('BuildAio')) {
+    $cfg.BuildAio = [bool]$PSBoundParameters['BuildAio']
+}
 if ($PSBoundParameters.ContainsKey('lang') -and $lang) { $cfg.Language = $lang }
 if ($PSBoundParameters.ContainsKey('profileName')) { $cfg.ProfileName = $profileName }
 if ($PSBoundParameters.ContainsKey('defenderBuild') -and $defenderBuild) {
@@ -756,5 +836,59 @@ if (-not (Test-Path $cfg.OutDir)) {
     New-Item -ItemType Directory -Path $cfg.OutDir -Force | Out-Null
 }
 
-# Execute build
-Invoke-WindowsIsoBuild -BuildCfg $cfg
+$allEditions = Resolve-Editions -EditionInput $cfg.Edition
+
+if ($allEditions.Count -le 1) {
+    $singleCfg = $cfg.Clone()
+    $singleCfg.Edition = $allEditions[0]
+    Invoke-WindowsIsoBuild -BuildCfg $singleCfg
+} elseif ($cfg.BuildAio) {
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host ("Starting Multi-Edition AIO Build for: {0}" -f ($allEditions -join ', ')) -ForegroundColor Cyan
+    Write-Host "========================================================================" -ForegroundColor Cyan
+
+    $lastTargetDir = $null
+    foreach ($ed in $allEditions) {
+        Write-Host ""
+        Write-Host ("---> Building intermediate WIM for edition: {0}" -f $ed) -ForegroundColor Green
+        $stageCfg = $cfg.Clone()
+        $stageCfg.Edition = $ed
+        $stageCfg.WimOnly = $true
+        $lastTargetDir = Invoke-WindowsIsoBuild -BuildCfg $stageCfg
+    }
+
+    $aioWimDir = if ($lastTargetDir -and (Test-Path $lastTargetDir)) { $lastTargetDir } else { $cfg.OutDir }
+
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host "Packaging All-In-One (AIO) Combined ISO..." -ForegroundColor Cyan
+    Write-Host "========================================================================" -ForegroundColor Cyan
+
+    $newIsoImageScript = Join-Path $RepoRoot "Utils\ISO\New-IsoImage.ps1"
+    if (Test-Path $newIsoImageScript) { . $newIsoImageScript }
+
+    New-AioIsoImage `
+        -WimDirectory $aioWimDir `
+        -WindowsTargetName $cfg.Target `
+        -DestinationDirectory $cfg.OutDir `
+        -Architecture $cfg.Architecture `
+        -Esd:$cfg.Esd `
+        -Revision $cfg.Revision `
+        -Lang $cfg.Language `
+        -ProfileName $cfg.ProfileName `
+        -SelectedEditions $allEditions
+} else {
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host ("Starting Multi-Edition Separated ISO Builds for: {0}" -f ($allEditions -join ', ')) -ForegroundColor Cyan
+    Write-Host "========================================================================" -ForegroundColor Cyan
+
+    foreach ($ed in $allEditions) {
+        Write-Host ""
+        Write-Host ("---> Building standalone ISO for edition: {0}" -f $ed) -ForegroundColor Green
+        $sepCfg = $cfg.Clone()
+        $sepCfg.Edition = $ed
+        Invoke-WindowsIsoBuild -BuildCfg $sepCfg
+    }
+}
