@@ -493,9 +493,10 @@ function Invoke-WindowsIsoBuild {
     }
 
     $targetDirectory = if (Get-Command Resolve-TargetDirectory -ErrorAction SilentlyContinue) {
-        Resolve-TargetDirectory -DestinationDirectory $destDir -Architecture $archInput -Build $iso.build -FallbackVersion $verbuild
+        Resolve-TargetDirectory -DestinationDirectory $destDir -Architecture $archInput -Build $iso.build -FallbackVersion $verbuild -Revision $revInput
     } else {
-        Join-Path $destDir "Target\x86_64\$($iso.build)"
+        $bTag = if ($revInput -and $iso.build -notmatch '\.') { "$($iso.build).$revInput" } else { $iso.build }
+        Join-Path $destDir "Target\x86_64\$bTag"
     }
 
     $buildDirectory = Join-Path $destDir "build\$name"
