@@ -338,25 +338,41 @@ jobs:
         shell: pwsh
         run: |
           $iso = Get-Content (Get-ChildItem -Path 'Out/Target' -Filter '*.json' -Recurse | Select-Object -First 1).FullName | ConvertFrom-Json
-          $imageNames = $iso.images | ForEach-Object { $_.name }
-          if ($imageNames.Count -gt 1) {
-            if ($imageNames[0] -match '^(Windows (10|11))\s*(.*)') {
-              $prefix = $matches[1]
-              $first = $imageNames[0]
-              $rest = $imageNames[1..($imageNames.Count - 1)] | ForEach-Object { ($_ -replace "^$prefix\s*", '') }
-              $finalImageName = $first + '/' + ($rest -join '/')
-            } else {
-              $finalImageName = $imageNames -join '/'
+          $imageNames = @($iso.images | ForEach-Object { $_.name })
+          $opts = '${{ steps.map.outputs.options }}'
+
+          $prefix = ''
+          if ($imageNames.Count -gt 0 -and $imageNames[0] -match '^(Windows (?:10|11))\s*(.*)$') {
+            $prefix = $matches[1]
+          }
+
+          $hasDefenderSuffix = $false
+          $cleanedEditions = [System.Collections.Generic.List[string]]::new()
+          foreach ($name in $imageNames) {
+            $n = $name
+            if ($prefix) {
+              $n = ($n -replace "^$([regex]::Escape($prefix))\s*", '').Trim()
             }
-          } else {
-            $finalImageName = $imageNames
+            if ($n -match '\((?:No\s+)?Defender\)') {
+              $hasDefenderSuffix = $true
+              $n = ($n -replace '\s*\((?:No\s+)?Defender\)\s*', '').Trim()
+            }
+            if ($n -and -not $cleanedEditions.Contains($n)) {
+              $cleanedEditions.Add($n)
+            }
+          }
+
+          $isSeparateDefender = $hasDefenderSuffix -or ($opts -match '(?i)-separatedefendereditions(?!\:\$false)\b')
+          $editionsJoined = $cleanedEditions -join '/'
+          $finalImageName = if ($prefix) { "$prefix $editionsJoined" } else { $editionsJoined }
+          if ($isSeparateDefender) {
+            $finalImageName = "$finalImageName (Defender / No Defender)"
           }
 
           $parts = Get-ChildItem -Path "Out/Target" -Filter "$($env:ISO_NAME).zip.0*" -Recurse | Sort-Object Name
           $partsList = ($parts | ForEach-Object { $_.Name }) -join '  <br/>'
 
           # Build config row only when there are any options
-          $opts = '${{ steps.map.outputs.options }}'
           $optsRow = $null
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
             $items = [System.Collections.Generic.List[string]]::new()
@@ -695,25 +711,41 @@ jobs:
         shell: pwsh
         run: |
           $iso = Get-Content (Get-ChildItem -Path 'Out/Target' -Filter '*.json' -Recurse | Select-Object -First 1).FullName | ConvertFrom-Json
-          $imageNames = $iso.images | ForEach-Object { $_.name }
-          if ($imageNames.Count -gt 1) {
-            if ($imageNames[0] -match '^(Windows (10|11))\s*(.*)') {
-              $prefix = $matches[1]
-              $first = $imageNames[0]
-              $rest = $imageNames[1..($imageNames.Count - 1)] | ForEach-Object { ($_ -replace "^$prefix\s*", '') }
-              $finalImageName = $first + '/' + ($rest -join '/')
-            } else {
-              $finalImageName = $imageNames -join '/'
+          $imageNames = @($iso.images | ForEach-Object { $_.name })
+          $opts = '${{ needs.prepare_aio.outputs.options }}'
+
+          $prefix = ''
+          if ($imageNames.Count -gt 0 -and $imageNames[0] -match '^(Windows (?:10|11))\s*(.*)$') {
+            $prefix = $matches[1]
+          }
+
+          $hasDefenderSuffix = $false
+          $cleanedEditions = [System.Collections.Generic.List[string]]::new()
+          foreach ($name in $imageNames) {
+            $n = $name
+            if ($prefix) {
+              $n = ($n -replace "^$([regex]::Escape($prefix))\s*", '').Trim()
             }
-          } else {
-            $finalImageName = $imageNames
+            if ($n -match '\((?:No\s+)?Defender\)') {
+              $hasDefenderSuffix = $true
+              $n = ($n -replace '\s*\((?:No\s+)?Defender\)\s*', '').Trim()
+            }
+            if ($n -and -not $cleanedEditions.Contains($n)) {
+              $cleanedEditions.Add($n)
+            }
+          }
+
+          $isSeparateDefender = $hasDefenderSuffix -or ($opts -match '(?i)-separatedefendereditions(?!\:\$false)\b')
+          $editionsJoined = $cleanedEditions -join '/'
+          $finalImageName = if ($prefix) { "$prefix $editionsJoined" } else { $editionsJoined }
+          if ($isSeparateDefender) {
+            $finalImageName = "$finalImageName (Defender / No Defender)"
           }
 
           $parts = Get-ChildItem -Path "Out/Target" -Filter "$($env:ISO_NAME).zip.0*" -Recurse | Sort-Object Name
           $partsList = ($parts | ForEach-Object { $_.Name }) -join '  <br/>'
 
           # Build config row only when there are any options
-          $opts = '${{ needs.prepare_aio.outputs.options }}'
           $optsRow = $null
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
             $items = [System.Collections.Generic.List[string]]::new()
