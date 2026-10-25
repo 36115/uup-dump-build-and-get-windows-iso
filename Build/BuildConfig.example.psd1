@@ -27,6 +27,11 @@
     Architecture = 'x64'
 
     # Windows Edition
+    # Edition selection:
+    # Single edition: 'pro', 'home', 'enterprise', etc.
+    # Multiple editions (array): @('pro', 'home', 'enterprise')
+    # Multiple editions (comma-separated): 'pro, home, enterprise'
+    # Supported editions:
     #   'pro'                     : Windows Pro [Default]
     #   'home'                    : Windows Home (Core)
     #   'multi'                   : Multi-Edition (Home + Pro in single ISO)
@@ -40,6 +45,11 @@
     #   'serverrdsh'              : Windows Enterprise multi-session
     #   (Shorthand aliases like 'core', 'homesl', 'proworkstation', 'proeducation' are also supported)
     Edition      = 'pro'
+
+    # Multi-Edition ISO Assembly Mode (applicable when multiple editions are specified)
+    #   $true  : (AIO) Builds each edition and merges them into a single All-In-One bootable ISO [Default]
+    #   $false : Builds each edition into its own separated standalone ISO
+    BuildAio     = $true
 
     # Language code
     # Options: 'en-us', 'zh-cn', 'es-es', 'de-de', 'fr-fr', 'ja-jp', etc.
