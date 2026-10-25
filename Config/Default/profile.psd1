@@ -19,7 +19,7 @@
     ConvertConfig = @{
         AutoExit  = 1
         ResetBase = 1
-        Cleanup   = 1
+        Cleanup   = 0
     }
 
     # Modular servicing scripts to execute
