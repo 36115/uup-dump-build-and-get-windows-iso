@@ -66,6 +66,11 @@
     # Output Directory
     OutDir       = 'Out'
 
+    # UUP Dump Download & Cache Behavior
+    # If $false, reuses existing cached base Windows media under Out/BaseIso if UUP configs haven't changed.
+    # Set to $true or pass -ForceDownload to bypass cache and redownload fresh from UUP Dump.
+    ForceDownload = $false
+
     # Optional specific revision (leave empty '' for latest available on UUP)
     Revision     = ''
 }
