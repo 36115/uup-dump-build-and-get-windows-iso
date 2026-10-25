@@ -21,23 +21,17 @@ function Get-NSudoPath {
     $repoRoot = if (Get-Command Get-RepoRoot -ErrorAction SilentlyContinue) {
         Get-RepoRoot $PSScriptRoot
     } else {
-        $r = $PSScriptRoot
-        while ($r -and -not (Test-Path (Join-Path $r ".git"))) {
-            $p = Split-Path $r -Parent
-            if ($p -eq $r) { break }
-            $r = $p
-        }
-        if (-not $r -or -not (Test-Path (Join-Path $r ".git"))) {
-            $r = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-        }
-        $r
+        (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
     }
-
 
     $candidateNSudos = @(
         (Join-Path $repoRoot "External\NSudo\NSudoLC.exe"),
+        (Join-Path $repoRoot "External\NSudo\$hostArch\NSudoLC.exe"),
+        (Join-Path $repoRoot "External\NSudo\ARM64\NSudoLC.exe"),
         (Join-Path $repoRoot "External\NSudo\x64\NSudoLC.exe"),
         (Join-Path $PSScriptRoot "NSudoLC.exe"),
+        (Join-Path $PSScriptRoot "$hostArch\NSudoLC.exe"),
+        (Join-Path $PSScriptRoot "ARM64\NSudoLC.exe"),
         (Join-Path $PSScriptRoot "x64\NSudoLC.exe")
     )
     foreach ($cand in $candidateNSudos) {
@@ -62,30 +56,15 @@ function Get-NSudoPath {
         return (Resolve-Path $targetExe).Path
     }
 
-    Write-Host "Downloading NSudo from GitHub release..." -ForegroundColor Cyan
-    $zipUrl = "https://github.com/M2TeamArchived/NSudo/releases/download/8.2/NSudo_8.2_All_Components.zip"
-    $tempZip = Join-Path $env:TEMP "NSudo_8.2_$([System.IO.Path]::GetRandomFileName()).zip"
-    $tempExtract = Join-Path $env:TEMP "NSudo_Ext_$([System.IO.Path]::GetRandomFileName())"
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $zipUrl -OutFile $tempZip -UseBasicParsing
-        Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
-        $foundExe = Get-ChildItem -Path $tempExtract -Filter "NSudoLC.exe" -Recurse | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
-        if (-not $foundExe) {
-            $foundExe = Get-ChildItem -Path $tempExtract -Filter "NSudoLC.exe" -Recurse | Select-Object -First 1
-        }
-        if ($foundExe) {
-            Copy-Item -Path $foundExe.FullName -Destination $targetExe -Force
-        }
-    } catch {
-        Write-Warning "Failed to download NSudo: $_"
-    } finally {
-        if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue }
-    }
+    Write-Host "Downloading NSudo from GitHub release ($hostArch)..." -ForegroundColor Cyan
+    $tag = Get-LatestGitHubTag "M2TeamArchived/NSudo" "8.2"
+    $zipUrl = "https://github.com/M2TeamArchived/NSudo/releases/download/$tag/NSudo_${tag}_All_Components.zip"
+    $archFilter = if ($hostArch -eq 'arm64') { "*ARM64*" } else { "*x64*" }
 
-    if (Test-Path $targetExe -PathType Leaf) {
-        return (Resolve-Path $targetExe).Path
+    if (Expand-RemoteArchive -Uri $zipUrl -DestinationPath $targetDir -Files @("NSudoLC.exe") -PathFilter $archFilter) {
+        if (Test-Path $targetExe -PathType Leaf) {
+            return (Resolve-Path $targetExe).Path
+        }
     }
 
     return $null
