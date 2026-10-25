@@ -1407,13 +1407,18 @@ function Resolve-TargetDirectory {
         [Parameter(Mandatory = $false)]
         [string]$Build = "",
         [Parameter(Mandatory = $false)]
-        [string]$FallbackVersion = ""
+        [string]$FallbackVersion = "",
+        [Parameter(Mandatory = $false)]
+        [string]$Revision = ""
     )
     $archTag = switch -Regex ($Architecture) {
         'arm64' { 'arm64' }
         default { 'x86_64' }
     }
     $buildTag = if ($Build) { $Build } else { $FallbackVersion }
+    if ($Revision -and $buildTag -notmatch '\.') {
+        $buildTag = "$buildTag.$Revision"
+    }
     $targetDir = Join-Path $DestinationDirectory "Target\$archTag\$buildTag"
     if (-not (Test-Path $targetDir)) {
         New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
