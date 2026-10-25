@@ -355,6 +355,9 @@ function Set-UupConvertConfig {
         [switch]$WimOnly,
 
         [Parameter(Mandatory = $false)]
+        [switch]$NeedsServicing,
+
+        [Parameter(Mandatory = $false)]
         [System.Collections.IDictionary]$ConvertConfigOverrides = @{}
     )
 
@@ -404,7 +407,7 @@ function Set-UupConvertConfig {
         $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vDeleteSource' -Value '1'
         $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vAutoEditions' -Value $VirtualEdition
     }
-    if ($WimOnly) {
+    if ($WimOnly -or $NeedsServicing) {
         $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'SkipISO' -Value '1'
         $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'vSkipISO' -Value '1'
         $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'wim2esd' -Value '0'
