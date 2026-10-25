@@ -570,11 +570,26 @@ function Invoke-WindowsIsoBuild {
             }
         }
 
+        # Raw UUP package cache directory (preserves downloaded .cab/.esd files across converter tweaks)
+        $pkgCacheDir = if ($uupConfigInfo -and (Get-Command Get-UupPackageCacheDir -ErrorAction SilentlyContinue)) {
+            Get-UupPackageCacheDir -DestDir $destDir -ConfigInfo $uupConfigInfo
+        } else {
+            $null
+        }
+
+        if (Get-Command Disconnect-UupPackageCache -ErrorAction SilentlyContinue) {
+            Disconnect-UupPackageCache -BuildDirectory $buildDirectory
+        }
         if (Test-Path $buildDirectory) { Remove-Item -Force -Recurse $buildDirectory | Out-Null }
         New-Item -ItemType Directory -Force $buildDirectory | Out-Null
 
         Write-CleanLine "Downloading the UUP dump download package for $title from $($iso.downloadPackageUrl)"
         Get-UupPackageZip -DownloadPackageUrl $iso.downloadPackageUrl -DestinationDirectory $buildDirectory -VirtualEdition $virtualEd
+
+        # Link buildDirectory\uup to raw package cache for instant local package reuse
+        if ($pkgCacheDir -and (Get-Command Initialize-UupPackageCache -ErrorAction SilentlyContinue)) {
+            Initialize-UupPackageCache -BuildDirectory $buildDirectory -PackageCacheDir $pkgCacheDir -Force:$forceDownloadVal
+        }
 
         $iniFile = Join-Path $buildDirectory 'ConvertConfig.ini'
         $tag = Set-UupConvertConfig -ConfigFile $iniFile `
@@ -594,6 +609,10 @@ function Invoke-WindowsIsoBuild {
 
         Write-CleanLine "Creating the $title iso file inside the $buildDirectory directory"
         Invoke-UupDownloadProcess -BuildDirectory $buildDirectory
+
+        if ($pkgCacheDir -and (Get-Command Sync-UupPackageCache -ErrorAction SilentlyContinue)) {
+            Sync-UupPackageCache -BuildDirectory $buildDirectory -PackageCacheDir $pkgCacheDir
+        }
 
         # Cache the resulting base media for future builds
         if ($uupConfigInfo -and (Get-Command Save-CachedUupMedia -ErrorAction SilentlyContinue)) {
