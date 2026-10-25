@@ -288,9 +288,9 @@ function Get-UupPackageZip {
 
     $hasVirtual = -not [string]::IsNullOrWhiteSpace($VirtualEdition)
     $body = if ($hasVirtual) {
-        @{ autodl = 3; updates = 1; cleanup = 1; 'virtualEditions[]' = $VirtualEdition }
+        @{ autodl = 3; updates = 1; cleanup = 0; 'virtualEditions[]' = $VirtualEdition }
     } else {
-        @{ autodl = 2; updates = 1; cleanup = 1 }
+        @{ autodl = 2; updates = 1; cleanup = 0 }
     }
 
     $zipPath = "$DestinationDirectory.zip"
@@ -364,7 +364,7 @@ function Set-UupConvertConfig {
     $effectiveOverrides = [ordered]@{
         'AutoExit'  = '1'
         'ResetBase' = '1'
-        'Cleanup'   = '1'
+        'Cleanup'   = '0'
     }
     if ($ConvertConfigOverrides) {
         foreach ($k in $ConvertConfigOverrides.Keys) {
