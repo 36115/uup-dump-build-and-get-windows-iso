@@ -127,6 +127,23 @@ Run directly with positional or named parameters:
 pwsh Build-Iso.ps1 windows-11@26h2 Out -architecture x64 -edition pro -lang en-us -profileName Debloat -separateDefenderEditions
 ```
 
+---
+
+### Smart Base Media Caching & Fast Rebuilds
+
+The build engine automatically caches pristine base Windows media (ISOs and distributions) in `Out/BaseIso/`.
+
+- **Instant Rebuilds:** If you change post-processing settings (such as servicing profiles, Defender configurations, registry tweaks, or custom setup scripts), the engine stages the cached base media directly into the build environment instead of re-downloading multi-gigabyte packages from Microsoft servers.
+- **Smart Change Detection:** A SHA256 configuration signature tracks parameters that directly impact the base image bits:
+  - Windows Target, Architecture, Edition, Language, Revision, and UUP Build UUID.
+  - Base integration flags: `.NET Framework 3.5`, `Drivers`.
+  - Impacting UUP converter settings: `SkipEdge`, `ResetBase`, `SkipWinRE`, `StartVirtual`, `wim2esd`, `CustomList` / inbox app filtration.
+- **Excluded Settings:** Operational settings that do NOT alter the final Windows image bytes (such as `AutoExit`, `Cleanup`, `AutoStart`, `ForceDism`, `SkipISO` packaging, and offline servicing options like `SeparateDefenderEditions`) do not invalidate the cache.
+- **Force Fresh Download:** Bypass the cache at any time using `-forceDownload` or disable caching with `-noCache`:
+  ```powershell
+  .\Build-Iso.ps1 -forceDownload
+  ```
+
 
 ## Tags structure
 
