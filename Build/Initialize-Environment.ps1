@@ -79,10 +79,14 @@ if (Get-Command Get-7zPath -ErrorAction SilentlyContinue) {
         if ($sevenZipPath -and (Test-Path $sevenZipPath -PathType Leaf)) {
             $dir = Split-Path $sevenZipPath -Parent
             if (-not $pathsToAdd.Contains($dir)) { $pathsToAdd.Add($dir) }
-            # Ensure '7z.exe' exists in the folder if 7za.exe is present
+            # Ensure both '7z.exe' and '7za.exe' exist in the folder
             $sevenZTarget = Join-Path $dir "7z.exe"
-            if (-not (Test-Path $sevenZTarget) -and ((Split-Path $sevenZipPath -Leaf) -ieq "7za.exe")) {
-                Copy-Item -Path $sevenZipPath -Destination $sevenZTarget -Force -ErrorAction SilentlyContinue
+            $sevenZaTarget = Join-Path $dir "7za.exe"
+            if (-not (Test-Path $sevenZTarget) -and (Test-Path $sevenZaTarget)) {
+                Copy-Item -Path $sevenZaTarget -Destination $sevenZTarget -Force -ErrorAction SilentlyContinue
+            }
+            if (-not (Test-Path $sevenZaTarget) -and (Test-Path $sevenZTarget)) {
+                Copy-Item -Path $sevenZTarget -Destination $sevenZaTarget -Force -ErrorAction SilentlyContinue
             }
         }
     } catch {
