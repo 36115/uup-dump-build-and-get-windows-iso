@@ -657,6 +657,7 @@ function Invoke-WindowsIsoBuild {
             -NetFx3:$netfx3Val `
             -VirtualEdition $virtualEd `
             -WimOnly:$wimOnlyVal `
+            -NeedsServicing:$needsServicing `
             -ConvertConfigOverrides $convertConfigOverrides
 
         if ($profileChain -and (Get-Command Initialize-UupCustomAppsList -ErrorAction SilentlyContinue)) {
