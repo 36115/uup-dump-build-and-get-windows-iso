@@ -365,20 +365,17 @@ jobs:
           $opts = '${{ steps.map.outputs.options }}'
           $optsRow = $null
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
-            # map short flags to full descriptions from workflow inputs
-            $descMap = @{
-              '-esd'                       = 'Use ESD compression'
-              '-drivers'                   = 'Add additional drivers'
-              '-netfx3'                    = 'Add .NET Framework 3.5'
-              '-separatedefendereditions'  = 'Separate Defender editions'
+            $items = [System.Collections.Generic.List[string]]::new()
+            if ($opts -match '(?i)-esd\b') { $items.Add('Use ESD compression') }
+            if ($opts -match '(?i)-drivers\b') { $items.Add('Add additional drivers') }
+            if ($opts -match '(?i)-netfx3\b') { $items.Add('Add .NET Framework 3.5') }
+            if ($opts -match '(?i)-separatedefendereditions(?!\:\$false)\b') { $items.Add('Separate Defender editions') }
+            if ($opts -match '(?i)-profileName\s+["'']?([^"''\s]+)["'']?') {
+              $items.Add("Profile: $($matches[1])")
             }
-            # split -> normalize -> map -> deduplicate
-            $items = $opts -split '\s+' |
-              Where-Object { $_ -and $_.Trim() -ne '' } |
-              ForEach-Object {
-                $k = $_.ToLower()
-                if ($descMap.ContainsKey($k)) { $descMap[$k] } else { $_.TrimStart('-') }
-              } | Select-Object -Unique
+            if ($opts -match '(?i)-revision\s+["'']?([^"''\s]+)["'']?') {
+              $items.Add("Revision: $($matches[1])")
+            }
 
             if ($items.Count -gt 0) {
               $optsFormatted = ($items | ForEach-Object { "<li>$($_)</li>" }) -join ''
@@ -727,18 +724,17 @@ jobs:
           $opts = '${{ needs.prepare_aio.outputs.options }}'
           $optsRow = $null
           if (-not [string]::IsNullOrWhiteSpace($opts)) {
-            $descMap = @{
-              '-esd'                       = 'Use ESD compression'
-              '-drivers'                   = 'Add additional drivers'
-              '-netfx3'                    = 'Add .NET Framework 3.5'
-              '-separatedefendereditions'  = 'Separate Defender editions'
+            $items = [System.Collections.Generic.List[string]]::new()
+            if ($opts -match '(?i)-esd\b') { $items.Add('Use ESD compression') }
+            if ($opts -match '(?i)-drivers\b') { $items.Add('Add additional drivers') }
+            if ($opts -match '(?i)-netfx3\b') { $items.Add('Add .NET Framework 3.5') }
+            if ($opts -match '(?i)-separatedefendereditions(?!\:\$false)\b') { $items.Add('Separate Defender editions') }
+            if ($opts -match '(?i)-profileName\s+["'']?([^"''\s]+)["'']?') {
+              $items.Add("Profile: $($matches[1])")
             }
-            $items = $opts -split '\s+' |
-              Where-Object { $_ -and $_.Trim() -ne '' } |
-              ForEach-Object {
-                $k = $_.ToLower()
-                if ($descMap.ContainsKey($k)) { $descMap[$k] } else { $_.TrimStart('-') }
-              } | Select-Object -Unique
+            if ($opts -match '(?i)-revision\s+["'']?([^"''\s]+)["'']?') {
+              $items.Add("Revision: $($matches[1])")
+            }
 
             if ($items.Count -gt 0) {
               $optsFormatted = ($items | ForEach-Object { "<li>$($_)</li>" }) -join ''
