@@ -52,7 +52,16 @@ function Save-RemoteFile {
         [string]$Uri,
 
         [Parameter(Mandatory = $true)]
-        [string]$DestinationFile
+        [string]$DestinationFile,
+
+        [Parameter(Mandatory = $false)]
+        [int]$TimeoutSec = 30,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MaxRetries = 2,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Quiet
     )
 
     try {
@@ -61,10 +70,22 @@ function Save-RemoteFile {
         if ($parent -and -not (Test-Path $parent)) {
             New-Item -ItemType Directory -Path $parent -Force -ErrorAction SilentlyContinue | Out-Null
         }
-        Invoke-WebRequest -Uri $Uri -OutFile $DestinationFile -UseBasicParsing
-        return $true
+        for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $Uri -OutFile $DestinationFile -UseBasicParsing -TimeoutSec $TimeoutSec
+                if (Test-Path $DestinationFile) { return $true }
+            } catch {
+                if ($attempt -ge $MaxRetries) { throw }
+                Start-Sleep -Seconds 2
+            }
+        }
+        return $false
     } catch {
-        Write-Warning "Failed to download $($Uri): $_"
+        if (-not $Quiet) {
+            Write-Warning "Failed to download $($Uri): $_"
+        } else {
+            Write-Host "      [INFO] Remote file download failed ($($Uri)): $($_.Exception.Message)" -ForegroundColor Gray
+        }
         return $false
     }
 }
@@ -82,7 +103,16 @@ function Expand-RemoteArchive {
         [string[]]$Files = @(),
 
         [Parameter(Mandatory = $false)]
-        [string]$PathFilter = ""
+        [string]$PathFilter = "",
+
+        [Parameter(Mandatory = $false)]
+        [int]$TimeoutSec = 30,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MaxRetries = 2,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Quiet
     )
 
     $tempZip = Join-Path $env:TEMP "archive_$([System.IO.Path]::GetRandomFileName()).zip"
@@ -92,7 +122,22 @@ function Expand-RemoteArchive {
         if (-not (Test-Path $DestinationPath)) {
             New-Item -ItemType Directory -Path $DestinationPath -Force -ErrorAction SilentlyContinue | Out-Null
         }
-        Invoke-WebRequest -Uri $Uri -OutFile $tempZip -UseBasicParsing
+        $downloaded = $false
+        for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+            try {
+                if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
+                Invoke-WebRequest -Uri $Uri -OutFile $tempZip -UseBasicParsing -TimeoutSec $TimeoutSec
+                if (Test-Path $tempZip) {
+                    $downloaded = $true
+                    break
+                }
+            } catch {
+                if ($attempt -ge $MaxRetries) { throw }
+                Start-Sleep -Seconds 2
+            }
+        }
+        if (-not $downloaded) { return $false }
+
         Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
 
         if ($Files.Count -gt 0) {
@@ -112,7 +157,11 @@ function Expand-RemoteArchive {
         }
         return $true
     } catch {
-        Write-Warning "Failed to download/extract from $($Uri): $_"
+        if (-not $Quiet) {
+            Write-Warning "Failed to download/extract from $($Uri): $_"
+        } else {
+            Write-Host "      [INFO] Remote archive download failed ($($Uri)): $($_.Exception.Message)" -ForegroundColor Gray
+        }
         return $false
     } finally {
         if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }

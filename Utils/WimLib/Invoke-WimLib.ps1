@@ -24,11 +24,20 @@ function Get-WimLibPath {
         (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
     }
 
+    $hArch = if ($global:hostArch) {
+        $global:hostArch
+    } elseif (Get-Command Get-HostArch -ErrorAction SilentlyContinue) {
+        Get-HostArch
+    } else {
+        $a = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+        if ($a -eq 'ARM64') { 'arm64' } else { 'x64' }
+    }
+
     $candidateWimlibs = @(
         (Join-Path $repoRoot "External\WimLib\wimlib-imagex.exe"),
-        (Join-Path $repoRoot "External\WimLib\$hostArch\wimlib-imagex.exe"),
+        (Join-Path $repoRoot "External\WimLib\$hArch\wimlib-imagex.exe"),
         (Join-Path $PSScriptRoot "wimlib-imagex.exe"),
-        (Join-Path $PSScriptRoot "windows-$hostArch\wimlib-imagex.exe"),
+        (Join-Path $PSScriptRoot "windows-$hArch\wimlib-imagex.exe"),
         (Join-Path $PSScriptRoot "windows-x64\wimlib-imagex.exe")
     )
     foreach ($cand in $candidateWimlibs) {
@@ -53,17 +62,34 @@ function Get-WimLibPath {
         return (Resolve-Path $targetExe).Path
     }
 
-    Write-Host "Downloading native wimlib-imagex ($hostArch) from wimlib.net..." -ForegroundColor Cyan
+    # Check build output directory (UUP converter extracts wimlib-imagex into Out\build\*\bin\)
+    $outDir = Join-Path $repoRoot "Out"
+    if (Test-Path $outDir) {
+        $extractedWimlib = Get-ChildItem -Path $outDir -Filter "wimlib-imagex.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($extractedWimlib -and (Test-Path $extractedWimlib.FullName)) {
+            $extractedDll = Join-Path (Split-Path $extractedWimlib.FullName -Parent) "libwim-15.dll"
+            Copy-Item -Path $extractedWimlib.FullName -Destination $targetExe -Force -ErrorAction SilentlyContinue
+            if (Test-Path $extractedDll) {
+                Copy-Item -Path $extractedDll -Destination (Join-Path $targetDir "libwim-15.dll") -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path $targetExe -PathType Leaf) {
+                return (Resolve-Path $targetExe).Path
+            }
+        }
+    }
+
+    Write-Host "Downloading native wimlib-imagex ($hArch) from wimlib.net..." -ForegroundColor Cyan
     $wimVer = Get-LatestWimLibVersion "1.14.5"
-    $wimArch = if ($hostArch -eq 'arm64') { 'aarch64' } else { 'x86_64' }
+    $wimArch = if ($hArch -eq 'arm64') { 'aarch64' } else { 'x86_64' }
     $zipUrl = "https://wimlib.net/downloads/wimlib-$wimVer-windows-$wimArch-bin.zip"
 
-    if (Expand-RemoteArchive -Uri $zipUrl -DestinationPath $targetDir -Files @("wimlib-imagex.exe", "libwim-15.dll")) {
+    if (Expand-RemoteArchive -Uri $zipUrl -DestinationPath $targetDir -Files @("wimlib-imagex.exe", "libwim-15.dll") -TimeoutSec 15 -MaxRetries 2 -Quiet) {
         if (Test-Path $targetExe -PathType Leaf) {
             return (Resolve-Path $targetExe).Path
         }
     }
 
+    Write-Host "      [INFO] wimlib-imagex is not yet downloaded. It will be resolved automatically from the UUP converter package." -ForegroundColor Gray
     return $null
 }
 
