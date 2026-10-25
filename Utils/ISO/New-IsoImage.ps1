@@ -1287,6 +1287,48 @@ function Resolve-DistributionDirectory {
         } elseif (Test-Path (Join-Path $BuildDirectory "ISOFOLDER\sources\install.esd")) {
             $distDir = Join-Path $BuildDirectory "ISOFOLDER"
         } else {
+            # Check for existing base ISO in BuildDirectory and unpack to ISOFOLDER
+            $isoFile = Get-ChildItem -Path $BuildDirectory -Filter "*.iso" -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notmatch '(?i)clean' } |
+                Select-Object -First 1
+            if ($isoFile) {
+                $targetDir = Join-Path $BuildDirectory "ISOFOLDER"
+                if (Get-Command Write-CleanLine -ErrorAction SilentlyContinue) {
+                    Write-CleanLine "Extracting base ISO $($isoFile.FullName) to $targetDir..."
+                } else {
+                    Write-Host "Extracting base ISO $($isoFile.FullName) to $targetDir..." -ForegroundColor Cyan
+                }
+                if (-not (Test-Path $targetDir)) {
+                    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                }
+
+                $7zHelper = Join-Path $PSScriptRoot "..\7z\Get-7zPath.ps1"
+                if (Test-Path $7zHelper) { . $7zHelper }
+                $sevenZip = if (Get-Command Get-7zPath -ErrorAction SilentlyContinue) {
+                    Get-7zPath
+                } else {
+                    (Get-Command 7z -ErrorAction SilentlyContinue).Source
+                }
+
+                if ($sevenZip -and (Test-Path $sevenZip)) {
+                    & $sevenZip x -y $isoFile.FullName "-o$targetDir" | Out-Null
+                } else {
+                    $mount = Mount-DiskImage -ImagePath $isoFile.FullName -PassThru
+                    try {
+                        $vol = $mount | Get-Volume
+                        if (-not $vol -or -not $vol.DriveLetter) { throw "Failed to mount ISO: $($isoFile.FullName)" }
+                        $drive = "$($vol.DriveLetter):\"
+                        Copy-Item -Path "$drive*" -Destination $targetDir -Recurse -Force
+                    } finally {
+                        Dismount-DiskImage -ImagePath $isoFile.FullName -ErrorAction SilentlyContinue | Out-Null
+                    }
+                }
+
+                if ((Test-Path (Join-Path $targetDir "sources\install.wim")) -or (Test-Path (Join-Path $targetDir "sources\install.esd"))) {
+                    return $targetDir
+                }
+            }
+
             throw "Could not locate distribution folder with sources\install.wim in $BuildDirectory"
         }
     }
