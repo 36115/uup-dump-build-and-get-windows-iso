@@ -80,7 +80,7 @@ foreach ($bin in $remoteRegBinaries) {
 
 Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "regsvc*.mui" -Recurse
 
-Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Services\RemoteRegistry"
+Remove-OfflineService "RemoteRegistry"
 Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Control\SecurePipeServers\winreg"
 Remove-RegKey "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\RemoteRegistry"
 
