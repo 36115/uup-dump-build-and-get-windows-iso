@@ -20,17 +20,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 Write-Step "Configuring Service Start Types..."
-Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Services\PlugPlay" "Start" 4
-Write-Success "Service PlugPlay start type set to 4 (Disabled)."
-
-Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Services\Spooler" "Start" 3
-Write-Success "Service Spooler start type set to 3 (Manual)."
-
-Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Services\lfsvc" "Start" 4
-Write-Success "Service lfsvc start type set to 4 (Disabled)."
-
-Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Services\DPS" "Start" 4 -Elevated
-Write-Success "Configured DPS start=4 via NSudo (TrustedInstaller)."
+Set-OfflineServiceStart "PlugPlay" 4
+Set-OfflineServiceStart "Spooler" 3
+Set-OfflineServiceStart "lfsvc" 4
+Set-OfflineServiceStart "DPS" 4 -Elevated
 
 Write-Step "Configuring Start Menu Layout and Language Privacy Policy..."
 Set-OfflineStartLayout -MountDir $MountDir
