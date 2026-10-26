@@ -21,10 +21,6 @@ $ErrorActionPreference = 'Stop'
 
 Write-Step "Purging AppResolverUX and Restoring Classic Open With..."
 Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*Microsoft.Windows.AppResolverUX*"
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "E2A4F912-2574-4A75-9BB0-0D023378592B")) {
-    Remove-RegKey $k
-}
 
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer" "NoUseStoreOpenWith" 1
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer" "NoNewAppAlert" 1
@@ -48,30 +44,14 @@ foreach ($bin in $folderSuggestBinaries) {
 }
 
 Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "FolderSuggestions*.mui" -Recurse
-
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "F46D4000-FD22-4DB4-AC8E-4E1DDDE828FE")) {
-    Remove-RegKey $k
-}
-
 Write-Success "Purged Folder Suggestions dialog registrations."
 
 Write-Step "Purging PinningConfirmationDialog SystemApp..."
 Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*Microsoft.Windows.PinningConfirmationDialog*"
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "PinningConfirmationDialog")) {
-    Remove-RegKey $k
-}
-
 Write-Success "Purged PinningConfirmationDialog registrations."
 
 Write-Step "Purging File Explorer (Legacy) SystemApp..."
 Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*Microsoft.Windows.FileExplorer*"
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "c5e2524a-ea46-4f67-841f-6a9465d9d515")) {
-    Remove-RegKey $k
-}
-
 Write-Success "Purged File Explorer (Legacy) registrations."
 
 Write-Step "Purging Retail Demo Content & Retail Demo Experience (RDX)..."
@@ -109,10 +89,7 @@ foreach ($bin in $retailDemoBinaries) {
 Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern @("*rdx*.mui", "*RetailInfo*.mui") -Recurse
 Remove-ScheduledTask "\Microsoft\Windows\RetailDemo"
 Remove-RegKey "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RetailDemo"
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "RetailDemo")) {
-    Remove-RegKey $k
-}
+Clear-OfflineAppxInboxAndDeprovision -Patterns "RetailDemo"
 
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\RetailDemo" "AllowRetailDemo" 0
 Write-Success "Purged RetailDemo registry and enforced AllowRetailDemo=0 policy."
@@ -158,8 +135,7 @@ if (Test-Path "$MountDir\Windows\System32\Tasks\Microsoft\Windows\ParentalContro
     Remove-ForceDirectory "$MountDir\Windows\System32\Tasks\Microsoft\Windows\ParentalControls"
 }
 
-Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Services\WpcMonSvc"
-Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Services\WpcMonTemplateSvc"
+Remove-OfflineService "WpcMonSvc", "WpcMonTemplateSvc"
 
 Remove-RegMultiSzItem -Key "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost" -ValueName "LocalService" -Item "WpcMonSvc"
 Remove-ScheduledTask "\Microsoft\Windows\ParentalControls"
@@ -216,10 +192,6 @@ foreach ($sc in ($narratorShortcuts | Select-Object -Unique)) {
 Remove-RegKey "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Accessibility\ATs\Narrator"
 Remove-RegKey "HKCU\Software\Microsoft\Narrator"
 
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "NarratorQuickStart")) {
-    Remove-RegKey $k
-}
 
 
 Write-Success "Purged Narrator and NarratorQuickStart registrations."
