@@ -165,8 +165,15 @@ function Invoke-ImageServicing {
         }
 
         $mode = if ($PSBoundParameters.ContainsKey('defenderBuild') -and $defenderBuild) { $defenderBuild } else { $null }
-        $isSeparate = if ($mode) { ($mode -match '(?i)^(both|dual)$') } else { $separateDefenderEditions.IsPresent }
-        if (-not $isSeparate -and -not $mode -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
+        $hasExplicitSep = $PSBoundParameters.ContainsKey('separateDefenderEditions')
+        $isSeparate = if ($mode) {
+            ($mode -match '(?i)^(both|dual)$')
+        } elseif ($hasExplicitSep) {
+            $separateDefenderEditions.IsPresent
+        } else {
+            $false
+        }
+        if (-not $isSeparate -and -not $mode -and -not $hasExplicitSep -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
             $isSeparate = Get-ProfileSeparateDefenderEditions -ProfileChain $profileChain
         }
         $pcfg = if ($profileDir -and (Test-Path (Join-Path $profileDir "profile.psd1"))) {
@@ -174,7 +181,7 @@ function Invoke-ImageServicing {
         } else {
             $null
         }
-        if (-not $isSeparate -and -not $mode -and $pcfg) {
+        if (-not $isSeparate -and -not $mode -and -not $hasExplicitSep -and $pcfg) {
             if ($pcfg.ContainsKey('DefenderBuild') -and $pcfg.DefenderBuild) {
                 $isSeparate = ($pcfg.DefenderBuild -match '(?i)^(both|dual)$')
             } elseif ($pcfg.ContainsKey('DefenderMode') -and $pcfg.DefenderMode) {
@@ -221,8 +228,7 @@ function Invoke-ImageServicing {
                     -ProfileName $targetProfile `
                     -ProfileDir $profileDir `
                     -NSudoPath $nsudo `
-                    -RemoveDefender:$false `
-                    -SkipCleanup
+                    -RemoveDefender:$false
                 if ($LASTEXITCODE -ne 0) { throw "Pass 1 servicing failed on index $idx with exit code $LASTEXITCODE" }
 
                 Dismount-WindowsImageIndex -MountDir $mountDir -Commit
