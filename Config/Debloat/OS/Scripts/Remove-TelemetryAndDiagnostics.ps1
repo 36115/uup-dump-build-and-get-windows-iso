@@ -32,11 +32,7 @@ foreach ($bin in $telemetryBinaries) {
     }
 }
 
-$telemetryServices = @("DiagTrack", "MapsBroker", "PhoneSvc")
-foreach ($svc in $telemetryServices) {
-    Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Services\$svc"
-    Write-Success "Deleted telemetry service: $svc"
-}
+Remove-OfflineService "DiagTrack", "MapsBroker", "PhoneSvc"
 
 Write-Step "Purging Microsoft Usage and Quality Insights..."
 $insightsDirs = @(
@@ -138,7 +134,7 @@ foreach ($bin in $werBinaries) {
 
 Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern @("WerFault*.mui", "wermgr*.mui", "werconcpl*.mui", "wersvc*.mui", "faultrep*.mui") -Recurse
 
-Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Services\WerSvc" "Start" 4
+Set-OfflineServiceStart "WerSvc" 4
 Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" "Debugger"
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" "Auto" "0" "REG_SZ"
 Remove-RegValue "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug" "Debugger"
