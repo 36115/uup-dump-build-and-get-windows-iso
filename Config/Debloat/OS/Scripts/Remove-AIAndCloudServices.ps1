@@ -48,11 +48,6 @@ foreach ($bin in $coreAiBinaries) {
     }
 }
 
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "MicrosoftWindows.Client.CoreAI")) {
-    Remove-RegKey $k
-}
-
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" "DisableAIDataAnalysis" 1
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" "TurnOffRecall" 1
 Write-Success "Purged CoreAI registry keys and enforced AI policies."
