@@ -85,7 +85,7 @@ function Invoke-ImageServicing {
         [switch]$wimOnly,
         [string]$wimlib = "",
         [string]$profileName = "",
-[string]$RepoRoot = "",
+        [string]$RepoRoot = "",
         [ValidateSet('Both', 'Remove', 'Keep', '')][string]$defenderBuild = "",
         [switch]$separateDefenderEditions
     )
@@ -142,7 +142,7 @@ function Invoke-ImageServicing {
             }
         }
 
-        $targetNameForOs = if ($currentImageName -and $currentImageName -ne "Index $idx") { $currentImageName }  else { "" }
+        $targetNameForOs = if ($currentImageName -and $currentImageName -ne "Index $idx") { $currentImageName } else { "" }
         $targetOS = if (Test-Path variable:global:targetOS) {
             $global:targetOS
         } elseif ($imgBuild -gt 0) {
@@ -168,8 +168,15 @@ function Invoke-ImageServicing {
         }
 
         $mode = if ($PSBoundParameters.ContainsKey('defenderBuild') -and $defenderBuild) { $defenderBuild } else { $null }
-        $isSeparate = if ($mode) { ($mode -match '(?i)^(both|dual)$') } else { $separateDefenderEditions.IsPresent }
-        if (-not $isSeparate -and -not $mode -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
+        $hasExplicitSep = $PSBoundParameters.ContainsKey('separateDefenderEditions')
+        $isSeparate = if ($mode) {
+            ($mode -match '(?i)^(both|dual)$')
+        } elseif ($hasExplicitSep) {
+            $separateDefenderEditions.IsPresent
+        } else {
+            $false
+        }
+        if (-not $isSeparate -and -not $mode -and -not $hasExplicitSep -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
             $isSeparate = Get-ProfileSeparateDefenderEditions -ProfileChain $profileChain
         }
 
@@ -206,7 +213,6 @@ function Invoke-ImageServicing {
                     -ProfileDir $profileDir `
                     -NSudoPath $nsudo `
                     -RemoveDefender:$false `
-                    -SkipCleanup `
                     -TargetOS $targetOS
                 if ($LASTEXITCODE -ne 0) { throw "Pass 1 servicing failed on index $idx with exit code $LASTEXITCODE" }
 

@@ -514,6 +514,10 @@ function Invoke-WindowsIsoBuild {
     $langInput = $BuildCfg.Language
     $profInput = $BuildCfg.ProfileName
     $separateDefenderVal = [bool]$BuildCfg.SeparateDefenderEditions
+    $defenderBuildVal = if ($BuildCfg.ContainsKey('DefenderBuild')) { [string]$BuildCfg.DefenderBuild } else { '' }
+    $hasExplicitDefender = ($BuildCfg.ContainsKey('ExplicitDefender') -and $BuildCfg.ExplicitDefender) -or
+        [bool]$defenderBuildVal -or
+        ($PSBoundParameters.ContainsKey('defenderBuild') -or $PSBoundParameters.ContainsKey('separateDefenderEditions'))
     $esdVal = [bool]$BuildCfg.Esd
     $driversVal = [bool]$BuildCfg.Drivers
     $netfx3Val = [bool]$BuildCfg.NetFx3
@@ -570,9 +574,26 @@ function Invoke-WindowsIsoBuild {
         @{}
     }
 
-    $isSeparateDefender = $separateDefenderVal
-    if (-not $isSeparateDefender -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
-        $isSeparateDefender = Get-ProfileSeparateDefenderEditions -ProfileChain $profileChain
+    $isSeparateDefender = if ($hasExplicitDefender) {
+        if ($defenderBuildVal) {
+            ($defenderBuildVal -match '(?i)^(both|dual)$')
+        } else {
+            $separateDefenderVal
+        }
+    } else {
+        $sep = $separateDefenderVal
+        if (-not $sep -and $profileChain -and (Get-Command Get-ProfileSeparateDefenderEditions -ErrorAction SilentlyContinue)) {
+            $sep = Get-ProfileSeparateDefenderEditions -ProfileChain $profileChain
+        }
+        $sep
+    }
+
+    if (-not $defenderBuildVal) {
+        if ($profileChain -and (Get-Command Get-ProfileDefenderMode -ErrorAction SilentlyContinue)) {
+            $defenderBuildVal = Get-ProfileDefenderMode -ProfileChain $profileChain
+        } else {
+            $defenderBuildVal = if ($isSeparateDefender) { 'Both' } else { 'Keep' }
+        }
     }
 
     $needsServicing = ([bool]$profInput -and ($resolvedProfile -notmatch '(?i)default$')) -or $isSeparateDefender
@@ -698,7 +719,7 @@ function Invoke-WindowsIsoBuild {
         $installWim = Resolve-ServicingWim -DistributionDirectory $distDir -WimLibPath $wimlib
 
         if ($needsServicing) {
-            Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esdVal -wimOnly:$wimOnlyVal -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $RepoRoot -separateDefenderEditions:$isSeparateDefender
+            Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esdVal -wimOnly:$wimOnlyVal -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $RepoRoot -defenderBuild $defenderBuildVal -separateDefenderEditions:$isSeparateDefender
         }
 
         if ($esdVal -and -not $wimOnlyVal) {
@@ -800,12 +821,14 @@ if ($PSBoundParameters.ContainsKey('profileName')) { $cfg.ProfileName = $profile
 if ($PSBoundParameters.ContainsKey('defenderBuild') -and $defenderBuild) {
     $cfg.DefenderBuild = $defenderBuild
     $cfg.SeparateDefenderEditions = ($defenderBuild -match '(?i)^(both|dual)$')
+    $cfg.ExplicitDefender = $true
 }
 if ($PSBoundParameters.ContainsKey('separateDefenderEditions')) {
     $cfg.SeparateDefenderEditions = $separateDefenderEditions.IsPresent
     if (-not $cfg.ContainsKey('DefenderBuild') -or -not $cfg.DefenderBuild) {
         $cfg.DefenderBuild = if ($separateDefenderEditions.IsPresent) { 'Both' } else { 'Keep' }
     }
+    $cfg.ExplicitDefender = $true
 }
 if ($PSBoundParameters.ContainsKey('revision') -and $revision) { $cfg.Revision = $revision }
 if ($sourceIso) { $cfg.SourceIso = $sourceIso }
