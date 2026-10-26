@@ -195,13 +195,6 @@ if ($RemoveDefender) {
     Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*SecHealthUI*"
     Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -Pattern "*SecHealthUI*"
 
-    $inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-    foreach ($pattern in @("SecHealthUI", "Apprep.ChxApp")) {
-        foreach ($k in (Get-RegSubKey $inboxAppsKey $pattern)) {
-            Remove-RegKey $k
-        }
-    }
-
     Write-Step "Purging SmartScreen, AppRep, and BrowserCore..."
     $smartScreenFiles = @(
         "$MountDir\Windows\System32\smartscreen.exe",
