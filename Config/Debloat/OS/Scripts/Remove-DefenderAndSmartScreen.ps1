@@ -179,7 +179,7 @@ if ($RemoveDefender) {
     Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "SettingsPageVisibility" "hide:windowsdefender" "REG_SZ"
     Write-Success "Configured SettingsPageVisibility to hide dead Windows Security page in Settings."
 
-    Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*Microsoft.SecHealthUI*"
+    Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*SecHealthUI*"
     Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -Pattern "*SecHealthUI*"
 
     $inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
