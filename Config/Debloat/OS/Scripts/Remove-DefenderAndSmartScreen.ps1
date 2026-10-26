@@ -76,15 +76,40 @@ if ($RemoveDefender) {
 
     $defenderFolders = @(
         "$MountDir\Program Files\Windows Defender",
+        "$MountDir\Program Files\Windows Defender Advanced Threat Protection",
+        "$MountDir\Program Files\Windows Defender Sleep",
+        "$MountDir\Program Files\Windows Security",
         "$MountDir\Program Files (x86)\Windows Defender",
+        "$MountDir\Program Files (x86)\Windows Defender Advanced Threat Protection",
         "$MountDir\ProgramData\Microsoft\Windows Defender",
+        "$MountDir\ProgramData\Microsoft\Windows Defender Advanced Threat Protection",
+        "$MountDir\ProgramData\Microsoft\Windows Security Health",
+        "$MountDir\ProgramData\Microsoft\Windows Security",
         "$MountDir\Windows\System32\drivers\wd",
-        "$MountDir\Windows\System32\SecurityHealth"
+        "$MountDir\Windows\System32\HealthAttestationClient",
+        "$MountDir\Windows\System32\SecurityHealth",
+        "$MountDir\Windows\System32\Sgrm",
+        "$MountDir\Windows\System32\WebThreatDefSvc",
+        "$MountDir\Windows\System32\WindowsPowerShell\v1.0\Modules\Defender",
+        "$MountDir\Windows\System32\WindowsPowerShell\v1.0\Modules\DefenderPerformance",
+        "$MountDir\Windows\SysWOW64\WindowsPowerShell\v1.0\Modules\Defender",
+        "$MountDir\Windows\SysWOW64\WindowsPowerShell\v1.0\Modules\DefenderPerformance"
     )
     foreach ($dir in $defenderFolders) {
         if (Test-Path $dir) {
             Remove-ForceDirectory $dir
             Write-Success "Deleted Defender directory: $dir"
+        }
+    }
+
+    $appGuardWims = @(
+        "$MountDir\Windows\Containers\WindowsDefenderApplicationGuard.wim",
+        "$MountDir\Windows\Containers\serviced\WindowsDefenderApplicationGuard.wim"
+    )
+    foreach ($wim in $appGuardWims) {
+        if (Test-Path $wim) {
+            Remove-ForceFile $wim
+            Write-Success "Deleted Application Guard WIM: $(Split-Path $wim -Leaf)"
         }
     }
 
@@ -101,7 +126,19 @@ if ($RemoveDefender) {
         "$MountDir\Windows\System32\webthreatdefsvc.dll",
         "$MountDir\Windows\System32\webthreatdefusersvc.dll",
         "$MountDir\Windows\System32\wscadminui.exe",
-        "$MountDir\Windows\System32\wscui.cpl"
+        "$MountDir\Windows\System32\wscui.cpl",
+        "$MountDir\Windows\System32\wscisvif.dll",
+        "$MountDir\Windows\System32\wscproxystub.dll",
+        "$MountDir\Windows\System32\windowsdefenderapplicationguardcsp.dll",
+        "$MountDir\Windows\SysWOW64\SecurityHealthAgent.dll",
+        "$MountDir\Windows\SysWOW64\SecurityHealthCore.dll",
+        "$MountDir\Windows\SysWOW64\SecurityHealthProxyStub.dll",
+        "$MountDir\Windows\SysWOW64\SecurityHealthSSO.dll",
+        "$MountDir\Windows\SysWOW64\SecurityHealthSsoUdk.dll",
+        "$MountDir\Windows\SysWOW64\SecurityHealthUdk.dll",
+        "$MountDir\Windows\SysWOW64\wscisvif.dll",
+        "$MountDir\Windows\SysWOW64\wscproxystub.dll",
+        "$MountDir\Windows\SysWOW64\windowsdefenderapplicationguardcsp.dll"
     )
     foreach ($bin in $defenderBinaries) {
         if (Test-Path $bin) {
@@ -112,19 +149,59 @@ if ($RemoveDefender) {
 
     $defenderServices = @(
         "Sense", "WdBoot", "WdFilter", "WdNisDrv", "WdNisSvc",
-        "WinDefend", "SecurityHealthService", "webthreatdefsvc", "webthreatdefusersvc"
+        "WinDefend", "SecurityHealthService", "webthreatdefsvc", "webthreatdefusersvc",
+        "MDCoreSvc", "SgrmBroker", "SgrmAgent", "MsSecWfp", "MsSecFlt", "MsSecCore"
     )
     foreach ($svc in $defenderServices) {
         Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Services\$svc"
         Write-Success "Deleted Defender service: $svc"
     }
 
+    Remove-ScheduledTask "\Microsoft\Windows\Windows Defender"
+    Remove-ScheduledTask "\Microsoft\Windows\AppID\SmartScreenSpecific"
+    Write-Success "Purged Windows Defender and SmartScreen scheduled tasks."
+
+    $defenderRegKeys = @(
+        "HKLM\SOFTWARE\Microsoft\Windows Defender",
+        "HKLM\SOFTWARE\Microsoft\Windows Defender Security Center",
+        "HKLM\SOFTWARE\Microsoft\Windows Advanced Threat Protection",
+        "HKLM\SOFTWARE\Microsoft\Windows Security Health",
+        "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Defender",
+        "HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DefenderApiLogger",
+        "HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DefenderAuditLogger",
+        "HKCR\*\shellex\ContextMenuHandlers\EPP",
+        "HKCR\Directory\shellex\ContextMenuHandlers\EPP",
+        "HKCR\Drive\shellex\ContextMenuHandlers\EPP",
+        "HKLM\SOFTWARE\Classes\CLSID\{09A47860-11B0-4DA5-AFA5-26D86198A780}",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Windows Defender",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-Windows Defender/WHC",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\NIS-Driver-WFP/Diagnostic",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-Windows Defender/Operational"
+    )
+    foreach ($rk in $defenderRegKeys) {
+        Remove-RegKey $rk
+    }
+
     Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "SecurityHealth"
+    Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "WindowsDefender"
     Remove-RegValue "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run" "SecurityHealth"
-    Write-Success "Deleted SecurityHealth tray icon startup from Run keys."
+    Remove-RegValue "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run" "WindowsDefender"
+    Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "SecurityHealth"
+    Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "WindowsDefender"
+    Write-Success "Deleted SecurityHealth and WindowsDefender startup run values."
+
+    Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "SettingsPageVisibility" "hide:windowsdefender" "REG_SZ"
+    Write-Success "Configured SettingsPageVisibility to hide dead Windows Security page in Settings."
 
     Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*Microsoft.SecHealthUI*"
     Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -Pattern "*SecHealthUI*"
+
+    $inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
+    foreach ($pattern in @("SecHealthUI", "Apprep.ChxApp")) {
+        foreach ($k in (Get-RegSubKey $inboxAppsKey $pattern)) {
+            Remove-RegKey $k
+        }
+    }
 
     Write-Step "Purging SmartScreen, AppRep, and BrowserCore..."
     $smartScreenFiles = @(
