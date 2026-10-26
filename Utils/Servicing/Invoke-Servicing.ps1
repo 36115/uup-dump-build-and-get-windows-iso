@@ -478,9 +478,6 @@ function Remove-ScheduledTask {
     }
 }
 
-function Invoke-ElevatedRegDelete([string[]]$regKeys) {
-    Remove-RegKey -Key $regKeys -Elevated
-}
 
 function Remove-ForceFilesByPattern {
     [CmdletBinding()]
@@ -673,6 +670,61 @@ function Remove-OfflineProvisionedAppxPackage {
     }
 }
 
+$script:KnownSystemAppGuids = @{
+    "AppResolverUX"                      = "E2A4F912-2574-4A75-9BB0-0D023378592B"
+    "AddSuggestedFoldersToLibraryDialog" = "F46D4000-FD22-4DB4-AC8E-4E1DDDE828FE"
+    "FileExplorer"                       = "c5e2524a-ea46-4f67-841f-6a9465d9d515"
+    "FilePicker"                         = "1527c705-839a-4832-9118-54d4Bd6a0c89"
+}
+
+function Clear-OfflineAppxInboxAndDeprovision {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string[]]$Patterns,
+
+        [Parameter(Mandatory = $false, Position = 1)]
+        [string[]]$PackageFamilyNames = @(),
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$Guids = @()
+    )
+    $inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
+    $deproBase = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned"
+
+    $allSearchPatterns = [System.Collections.Generic.List[string]]::new()
+    foreach ($p in $Patterns) {
+        if (-not [string]::IsNullOrWhiteSpace($p)) { $allSearchPatterns.Add($p) }
+    }
+    foreach ($g in $Guids) {
+        if (-not [string]::IsNullOrWhiteSpace($g)) { $allSearchPatterns.Add($g) }
+    }
+
+    foreach ($pat in $allSearchPatterns) {
+        $cleanPat = $pat.Trim('*')
+        if (-not $cleanPat) { continue }
+        $keys = Get-RegSubKey $inboxAppsKey $cleanPat
+        foreach ($k in $keys) {
+            Remove-RegKey $k
+            Write-Success "Purged InboxApplications registration: $(Split-Path $k -Leaf)"
+        }
+    }
+
+    foreach ($pfn in $PackageFamilyNames) {
+        if (-not [string]::IsNullOrWhiteSpace($pfn)) {
+            Set-RegKey "$deproBase\$pfn"
+            Write-Success "Registered deprovisioning tombstone: $pfn"
+        }
+    }
+
+    foreach ($g in $Guids) {
+        if (-not [string]::IsNullOrWhiteSpace($g)) {
+            Set-RegKey "$deproBase\${g}_cw5n1h2txyewy"
+            Write-Success "Registered GUID deprovisioning tombstone: ${g}_cw5n1h2txyewy"
+        }
+    }
+}
+
 function Remove-OfflineSystemApp {
     [CmdletBinding()]
     param(
@@ -680,20 +732,103 @@ function Remove-OfflineSystemApp {
         [string]$MountDir,
 
         [Parameter(Mandatory = $true, Position = 1)]
-        [string]$Pattern
+        [string]$Pattern,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$Guid = @(),
+
+        [Parameter(Mandatory = $false)]
+        [string]$PackageFamilyName = "",
+
+        [Parameter(Mandatory = $false)]
+        [switch]$SkipRegistryCleanup = $false
     )
     $dirs = @(
         (Join-Path $MountDir "Windows\SystemApps"),
         (Join-Path $MountDir "Program Files\WindowsApps")
     )
+
+    $purgedAppNames = [System.Collections.Generic.List[string]]::new()
+    $detectedGuids = [System.Collections.Generic.List[string]]::new()
+    if ($Guid) { foreach ($g in $Guid) { $detectedGuids.Add($g) } }
+
     foreach ($baseDir in $dirs) {
         if (Test-Path $baseDir) {
             Get-ChildItem -Path $baseDir -Filter $Pattern -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                $folderName = $_.Name
+                $purgedAppNames.Add($folderName)
+
+                # Check for known GUID aliases
+                foreach ($knownName in $script:KnownSystemAppGuids.Keys) {
+                    if ($folderName -like "*$knownName*" -or $Pattern -like "*$knownName*") {
+                        $detectedGuids.Add($script:KnownSystemAppGuids[$knownName])
+                    }
+                }
+
                 Remove-ForceDirectory $_.FullName
-                Write-Success "Purged App directory: $($_.Name)"
+                Write-Success "Purged App directory: $folderName"
             }
         }
     }
+
+    if (-not $SkipRegistryCleanup) {
+        $pfnList = [System.Collections.Generic.List[string]]::new()
+        if ($PackageFamilyName) { $pfnList.Add($PackageFamilyName) }
+        foreach ($name in $purgedAppNames) {
+            $pfnList.Add($name)
+        }
+
+        $searchPatterns = [System.Collections.Generic.List[string]]::new()
+        $cleanPattern = $Pattern.Trim('*')
+        if ($cleanPattern) { $searchPatterns.Add($cleanPattern) }
+        foreach ($name in $purgedAppNames) {
+            $baseName = $name -replace '_.*$', ''
+            if ($baseName) { $searchPatterns.Add($baseName) }
+        }
+
+        Clear-OfflineAppxInboxAndDeprovision `
+            -Patterns $searchPatterns.ToArray() `
+            -PackageFamilyNames $pfnList.ToArray() `
+            -Guids $detectedGuids.ToArray()
+    }
+}
+
+function Remove-OfflineService {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
+        [string[]]$ServiceName,
+
+        [switch]$Elevated
+    )
+    foreach ($svc in $ServiceName) {
+        if ([string]::IsNullOrWhiteSpace($svc)) { continue }
+        $key = "HKLM\SYSTEM\CurrentControlSet\Services\$svc"
+        Remove-RegKey -Key $key -Elevated:$Elevated
+        Write-Success "Purged offline service: $svc"
+    }
+}
+
+function Set-OfflineServiceStart {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$ServiceName,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [int]$Start,
+
+        [switch]$Elevated
+    )
+    $key = "HKLM\SYSTEM\CurrentControlSet\Services\$ServiceName"
+    Set-RegValue -Key $key -ValueName "Start" -Data $Start -Type "REG_DWORD" -Elevated:$Elevated
+    $startDesc = switch ($Start) {
+        2 { "Automatic" }
+        3 { "Manual" }
+        4 { "Disabled" }
+        default { "$Start" }
+    }
+    Write-Success "Set service '$ServiceName' Start to $startDesc ($Start)"
 }
 
 function Set-OfflineRegionPolicy {
