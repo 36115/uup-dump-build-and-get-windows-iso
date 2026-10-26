@@ -20,21 +20,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 Write-Step "Purging Content Delivery Manager (microsoft.windows.contentdeliverymanager)..."
-$cdmApps = Get-ChildItem -Path "$MountDir\Windows\SystemApps" -Filter "Microsoft.Windows.ContentDeliveryManager_*" -Directory -ErrorAction SilentlyContinue
-foreach ($app in $cdmApps) {
-    Remove-ForceDirectory $app.FullName
-    Write-Success "Purged ContentDeliveryManager SystemApp: $($app.Name)"
-}
+Remove-OfflineSystemApp -MountDir $MountDir -Pattern "Microsoft.Windows.ContentDeliveryManager_*" -PackageFamilyName "Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy"
 
 Remove-ScheduledTask "\Microsoft\Windows\ContentDeliveryManager"
 Write-Success "Purged ContentDeliveryManager scheduled tasks."
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "ContentDeliveryManager")) {
-    Remove-RegKey $k
-}
-
-$deproKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy"
-Set-RegKey $deproKey
 
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" "DisableWindowsConsumerFeatures" 1
 Set-RegValue "HKCU\Software\Policies\Microsoft\Windows\CloudContent" "DisableWindowsConsumerFeatures" 1
