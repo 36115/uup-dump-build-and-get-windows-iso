@@ -39,6 +39,7 @@ if ($RemoveDefender) {
         "$MountDir\ProgramData\Microsoft\Windows Security Health",
         "$MountDir\Windows\System32\HealthAttestationClient",
         "$MountDir\Windows\System32\SecurityHealth",
+        "$MountDir\Windows\System32\WebThreatDefSvc",
         "$MountDir\Windows\System32\WindowsPowerShell\v1.0\Modules\Defender",
         "$MountDir\Windows\System32\WindowsPowerShell\v1.0\Modules\DefenderPerformance",
         "$MountDir\Windows\SysWOW64\WindowsPowerShell\v1.0\Modules\Defender",
@@ -67,6 +68,8 @@ if ($RemoveDefender) {
         "$MountDir\Windows\System32\SecurityHealthSSO.dll",
         "$MountDir\Windows\System32\SecurityHealthSsoUdk.dll",
         "$MountDir\Windows\System32\SecurityHealthUdk.dll",
+        "$MountDir\Windows\System32\webthreatdefsvc.dll",
+        "$MountDir\Windows\System32\webthreatdefusersvc.dll",
         "$MountDir\Windows\System32\wscadminui.exe",
         "$MountDir\Windows\System32\wscui.cpl",
         "$MountDir\Windows\System32\wscisvif.dll",
@@ -83,7 +86,8 @@ if ($RemoveDefender) {
 
     $defenderServices = @(
         "Sense", "WdBoot", "WdFilter", "WdNisDrv", "WdNisSvc",
-        "WinDefend", "SecurityHealthService"
+        "WinDefend", "SecurityHealthService", "webthreatdefsvc", "webthreatdefusersvc",
+        "MDCoreSvc", "SgrmBroker", "SgrmAgent", "MsSecWfp", "MsSecFlt", "MsSecCore"
     )
     foreach ($svc in $defenderServices) {
         Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Services\$svc"
@@ -99,7 +103,17 @@ if ($RemoveDefender) {
         "HKLM\SOFTWARE\Microsoft\Windows Defender Security Center",
         "HKLM\SOFTWARE\Microsoft\Windows Advanced Threat Protection",
         "HKLM\SOFTWARE\Microsoft\Windows Security Health",
-        "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Defender"
+        "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Defender",
+        "HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DefenderApiLogger",
+        "HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DefenderAuditLogger",
+        "HKCR\*\shellex\ContextMenuHandlers\EPP",
+        "HKCR\Directory\shellex\ContextMenuHandlers\EPP",
+        "HKCR\Drive\shellex\ContextMenuHandlers\EPP",
+        "HKLM\SOFTWARE\Classes\CLSID\{09A47860-11B0-4DA5-AFA5-26D86198A780}",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Windows Defender",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-Windows Defender/WHC",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\NIS-Driver-WFP/Diagnostic",
+        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-Windows Defender/Operational"
     )
     foreach ($rk in $defenderRegKeys) {
         Remove-RegKey $rk
