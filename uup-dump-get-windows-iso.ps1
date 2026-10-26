@@ -13,7 +13,9 @@ param(
         [switch]$wimOnly,
         [string]$sourceIso,
         [string]$revision,
-        [string]$profileName
+        [string]$profileName,
+        [ValidateSet('Both', 'Remove', 'Keep', '')][string]$defenderBuild = "",
+        [switch]$separateDefenderEditions
 )
 
 Set-StrictMode -Version Latest
@@ -161,7 +163,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     $installWim = Resolve-ServicingWim -DistributionDirectory $distDir -WimLibPath $wimlib
 
     if ($needsServicing) {
-                        Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esd -wimOnly:$wimOnly -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $PSScriptRoot
+                        Invoke-ImageServicing -installWim $installWim -distDir $distDir -esd:$esd -wimOnly:$wimOnly -wimlib $wimlib -profileName $resolvedProfile -RepoRoot $PSScriptRoot -separateDefenderEditions:$separateDefenderEditions
     }
 
     # If ESD was requested (and not wimOnly mode)

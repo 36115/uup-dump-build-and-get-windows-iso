@@ -35,10 +35,19 @@ param(
     [string]$ScriptsDir = "",
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipCleanup
+    [switch]$SkipCleanup,
+
+    [Parameter(Mandatory = $false)]
+    $RemoveDefender = $false
 )
 
 $ErrorActionPreference = 'Stop'
+
+$RemoveDefender = if ($RemoveDefender -is [bool]) {
+    $RemoveDefender
+} else {
+    ([string]$RemoveDefender -match '(?i)^(true|1|both|dual|remove|\$true)$')
+}
 
 function Write-Step([string]$msg) {
     Write-Host "`n>>> $msg" -ForegroundColor Cyan
@@ -898,7 +907,6 @@ function Filter-OfflineProvisionedAppxPackages {
         $EnabledApps = @(
             'Microsoft.WindowsStore',
             'Microsoft.StorePurchaseApp',
-            'Microsoft.SecHealthUI',
             'Microsoft.DesktopAppInstaller',
             'Microsoft.XboxIdentityProvider'
         )
@@ -1126,7 +1134,18 @@ try {
     if ($profileScripts.Count -gt 0) {
         foreach ($s in $profileScripts) {
             Write-Step "Executing Profile Script: $(Split-Path $s -Leaf)..."
-            . $s -MountDir $MountDir -CustomRegPath $CustomRegPath -NSudoPath $NSudoPath
+            $scriptArgs = @{
+                MountDir      = $MountDir
+                CustomRegPath = $CustomRegPath
+                NSudoPath     = $NSudoPath
+            }
+            if ($PSBoundParameters.ContainsKey('RemoveDefender')) {
+                $scriptCmd = Get-Command -Name $s -CommandType ExternalScript -ErrorAction SilentlyContinue
+                if ($scriptCmd -and $scriptCmd.Parameters.ContainsKey('RemoveDefender')) {
+                    $scriptArgs['RemoveDefender'] = $RemoveDefender
+                }
+            }
+            . $s @scriptArgs
         }
     } elseif ($ScriptsDir -and (Test-Path $ScriptsDir)) {
         $searchDirs = @(
@@ -1143,7 +1162,18 @@ try {
         $scriptsList = $scriptsList | Sort-Object Name
         foreach ($s in $scriptsList) {
             Write-Step "Executing Servicing Component: $($s.Name)..."
-            . $s.FullName -MountDir $MountDir -CustomRegPath $CustomRegPath -NSudoPath $NSudoPath
+            $scriptArgs = @{
+                MountDir      = $MountDir
+                CustomRegPath = $CustomRegPath
+                NSudoPath     = $NSudoPath
+            }
+            if ($PSBoundParameters.ContainsKey('RemoveDefender')) {
+                $scriptCmd = Get-Command -Name $s.FullName -CommandType ExternalScript -ErrorAction SilentlyContinue
+                if ($scriptCmd -and $scriptCmd.Parameters.ContainsKey('RemoveDefender')) {
+                    $scriptArgs['RemoveDefender'] = $RemoveDefender
+                }
+            }
+            . $s.FullName @scriptArgs
         }
     } else {
         Write-Info "No modular servicing scripts executed."
