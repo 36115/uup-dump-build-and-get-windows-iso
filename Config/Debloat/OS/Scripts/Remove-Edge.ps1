@@ -30,11 +30,6 @@ if (Test-Path $edgeDevToolsBin) {
 
 Remove-ForceFilesByPattern -Path "$MountDir\Windows\WinSxS" -Pattern "*crosoftedgedevtools*" -Recurse
 
-$inboxAppsKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\InboxApplications"
-foreach ($k in (Get-RegSubKey $inboxAppsKey "MicrosoftEdgeDevToolsClient")) {
-    Remove-RegKey $k
-}
-
 Remove-RegKey "HKCR\microsoft-edge-devtools"
 
 Write-Success "Purged Microsoft Edge DevTools Client registrations."
