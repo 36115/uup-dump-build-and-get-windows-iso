@@ -190,8 +190,21 @@ if ($RemoveDefender) {
     Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "WindowsDefender"
     Write-Success "Deleted SecurityHealth and WindowsDefender startup run values."
 
-    Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "SettingsPageVisibility" "hide:windowsdefender" "REG_SZ"
-    Write-Success "Configured SettingsPageVisibility to hide dead Windows Security page in Settings."
+    $polKey = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+    $currVisibility = Get-RegValue -Key $polKey -ValueName "SettingsPageVisibility"
+    if (-not $currVisibility) {
+        Set-RegValue $polKey "SettingsPageVisibility" "hide:windowsdefender" "REG_SZ"
+        Write-Success "Configured SettingsPageVisibility to hide dead Windows Security page in Settings."
+    } elseif ($currVisibility -notmatch '(?i)\bwindowsdefender\b') {
+        if ($currVisibility -like 'hide:*') {
+            Set-RegValue $polKey "SettingsPageVisibility" "$currVisibility;windowsdefender" "REG_SZ"
+        } else {
+            Set-RegValue $polKey "SettingsPageVisibility" "hide:$currVisibility;windowsdefender" "REG_SZ"
+        }
+        Write-Success "Appended windowsdefender to existing SettingsPageVisibility list."
+    } else {
+        Write-Success "Windows Security is already hidden in SettingsPageVisibility."
+    }
 
     Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*SecHealthUI*"
     Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -Pattern "*SecHealthUI*"
