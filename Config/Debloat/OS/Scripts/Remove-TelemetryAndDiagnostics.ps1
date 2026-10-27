@@ -119,11 +119,10 @@ $werBinaries = @(
     "$MountDir\Windows\System32\wermgr.exe",
     "$MountDir\Windows\System32\wersvc.dll",
     "$MountDir\Windows\System32\werconcpl.dll",
-    "$MountDir\Windows\System32\faultrep.dll",
+    # Note: faultrep.dll is preserved because WpnUserService.dll and shell components statically import it
     "$MountDir\Windows\SysWOW64\WerFault.exe",
     "$MountDir\Windows\SysWOW64\WerFaultSecure.exe",
-    "$MountDir\Windows\SysWOW64\wermgr.exe",
-    "$MountDir\Windows\SysWOW64\faultrep.dll"
+    "$MountDir\Windows\SysWOW64\wermgr.exe"
 )
 foreach ($bin in $werBinaries) {
     if (Test-Path $bin) {
@@ -132,7 +131,7 @@ foreach ($bin in $werBinaries) {
     }
 }
 
-Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern @("WerFault*.mui", "wermgr*.mui", "werconcpl*.mui", "wersvc*.mui", "faultrep*.mui") -Recurse
+Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern @("WerFault*.mui", "wermgr*.mui", "werconcpl*.mui", "wersvc*.mui") -Recurse
 
 Set-OfflineServiceStart "WerSvc" 4
 Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" "Debugger"
