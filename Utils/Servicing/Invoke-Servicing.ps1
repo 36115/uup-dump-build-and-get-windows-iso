@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Master Offline Windows Image Servicing Engine.
 .DESCRIPTION
@@ -92,55 +92,12 @@ $global:targetOS = $targetOS
 if (-not $ProfileDir -and $ProfileName) {
     if (Get-Command Resolve-ProfileDir -ErrorAction SilentlyContinue) {
         $ProfileDir = Resolve-ProfileDir -ProfileName $ProfileName -TargetOS $TargetOS -RepoRoot $repo
-    } else {
-        $candidateProfiles = @(
-            (Join-Path $repo "Config\$ProfileName"),
-            (Join-Path $repo "Config\Default")
-        )
-        foreach ($cand in $candidateProfiles) {
-            if (Test-Path $cand) {
-                $ProfileDir = (Resolve-Path $cand).Path
-                break
-            }
-        }
     }
 }
 
 # Resolve profile hierarchy if profile.psd1 is present
-if (-not (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
-    function Get-ProfileHierarchy([string]$dir, [string]$repoRoot, [string]$mountDir = "") {
-        $chain = [System.Collections.Generic.List[psobject]]::new()
-        $currDir = $dir
-        while ($currDir -and (Test-Path (Join-Path $currDir "profile.psd1"))) {
-            $manifestPath = Join-Path $currDir "profile.psd1"
-            $cfg = if (Get-Command Import-ProfileManifest -ErrorAction SilentlyContinue) {
-                Import-ProfileManifest -Path $manifestPath -MountDir $mountDir
-            } else {
-                Import-PowerShellDataFile -Path $manifestPath
-            }
-            $chain.Insert(0, [PSCustomObject]@{ Dir = $currDir; Config = $cfg })
-            if ($cfg.ContainsKey('Extends') -and $cfg.Extends) {
-                $parent = Join-Path $repoRoot "Config\$($cfg.Extends)"
-                if (Test-Path (Join-Path $parent "profile.psd1")) {
-                    $currDir = (Resolve-Path $parent).Path
-                } else {
-                    break
-                }
-            } else {
-                break
-            }
-        }
-        return $chain
-    }
-
-}
-
-$profileChain = if ($ProfileDir) {
-    if (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue) {
-        Get-ProfileHierarchy -ProfileDir $ProfileDir -RepoRoot $repo -MountDir $MountDir -TargetOS $TargetOS
-    } else {
-        Get-ProfileHierarchy -dir $ProfileDir -repoRoot $repo -mountDir $MountDir
-    }
+$profileChain = if ($ProfileDir -and (Get-Command Get-ProfileHierarchy -ErrorAction SilentlyContinue)) {
+    Get-ProfileHierarchy -ProfileDir $ProfileDir -RepoRoot $repo -MountDir $MountDir -TargetOS $TargetOS
 } else { @() }
 $profileRegFiles = [System.Collections.Generic.List[string]]::new()
 $profileScripts = [System.Collections.Generic.List[string]]::new()
@@ -430,8 +387,6 @@ function Get-RegSubKey {
     }
     return $out.ToArray()
 }
-
-# Compatibility aliases
 
 function Remove-ScheduledTask {
     [CmdletBinding()]
@@ -936,7 +891,6 @@ function Set-OfflineRegionPolicy {
     }
 }
 
-
 function Remove-RegMultiSzItem {
     [CmdletBinding()]
     param(
@@ -994,27 +948,143 @@ function Set-OfflineDefaultAssociations {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
-        [string]$MountDir
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $false)]
+        [string]$XmlPath = "",
+
+        [Parameter(Mandatory = $false)]
+        [hashtable[]]$CustomAssociations = @()
     )
-    $oemAssocXml = '<?xml version="1.0" encoding="UTF-8"?>' + "`r`n" +
-'<DefaultAssociations>' + "`r`n" +
-'  <Association Identifier=".bmp" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".dib" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".gif" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".ico" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".jfif" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".jpe" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".jpeg" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".jpg" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".jxr" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".png" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".tif" ProgId="TIFImage.Document" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".tiff" ProgId="PhotoViewer.FileAssoc.Tiff" ApplicationName="Windows Photo Viewer" />' + "`r`n" +
-'  <Association Identifier=".txt" ProgId="txtfile" ApplicationName="Notepad" />' + "`r`n" +
-'</DefaultAssociations>'
+
     $oemDest = "$MountDir\Windows\System32\OEMDefaultAssociations.xml"
-    [System.IO.File]::WriteAllText($oemDest, $oemAssocXml, [System.Text.Encoding]::UTF8)
-    Write-Success "Generated: $oemDest"
+    $parent = Split-Path $oemDest -Parent
+    if (-not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+
+    # Load or initialize target XML
+    [xml]$targetDoc = $null
+    if (Test-Path $oemDest) {
+        try {
+            $targetDoc = [xml]([System.IO.File]::ReadAllText($oemDest))
+        } catch {
+            Write-Warning "Could not parse existing $oemDest as XML: $_"
+        }
+    }
+
+    if (-not $targetDoc -or -not $targetDoc.DefaultAssociations) {
+        $targetDoc = [xml]'<?xml version="1.0" encoding="UTF-8"?><DefaultAssociations></DefaultAssociations>'
+    }
+
+    # Collect associations to merge
+    $assocsToMerge = [System.Collections.Generic.List[hashtable]]::new()
+
+    # 1. Resolve custom XML file path (explicit parameter or auto-discovered in Config / ProfileDir)
+    $resolvedXmlPath = $XmlPath
+    if (-not $resolvedXmlPath -or -not (Test-Path $resolvedXmlPath)) {
+        $searchPaths = [System.Collections.Generic.List[string]]::new()
+        if (Test-Path variable:ProfileDir) {
+            if ($ProfileDir) {
+                $searchPaths.Add((Join-Path $ProfileDir "OEMDefaultAssociations.xml"))
+                $searchPaths.Add((Join-Path $ProfileDir "OS\OEMDefaultAssociations.xml"))
+                $searchPaths.Add((Join-Path $ProfileDir "OS\Config\OEMDefaultAssociations.xml"))
+            }
+        }
+        if ($PSScriptRoot) {
+            $searchPaths.Add((Join-Path $PSScriptRoot "OEMDefaultAssociations.xml"))
+            $searchPaths.Add((Join-Path (Split-Path $PSScriptRoot -Parent) "OEMDefaultAssociations.xml"))
+            $searchPaths.Add((Join-Path (Split-Path $PSScriptRoot -Parent) "OS\OEMDefaultAssociations.xml"))
+            $searchPaths.Add((Join-Path (Split-Path $PSScriptRoot -Parent) "Config\Debloat\OS\OEMDefaultAssociations.xml"))
+        }
+        foreach ($sp in $searchPaths) {
+            if ($sp -and (Test-Path $sp)) {
+                $resolvedXmlPath = $sp
+                break
+            }
+        }
+    }
+
+    if ($resolvedXmlPath -and (Test-Path $resolvedXmlPath)) {
+        Write-Info "Loading custom default associations from: $resolvedXmlPath"
+        try {
+            [xml]$sourceXml = [System.IO.File]::ReadAllText($resolvedXmlPath)
+            if ($sourceXml.DefaultAssociations.Association) {
+                foreach ($assoc in $sourceXml.DefaultAssociations.Association) {
+                    $entry = @{
+                        Identifier      = $assoc.Identifier
+                        ProgId          = $assoc.ProgId
+                        ApplicationName = $assoc.ApplicationName
+                    }
+                    if ($assoc.Attributes['ApplyOnUpgrade']) { $entry['ApplyOnUpgrade'] = $assoc.ApplyOnUpgrade }
+                    if ($assoc.Attributes['OverwriteIfProgIdIs']) { $entry['OverwriteIfProgIdIs'] = $assoc.OverwriteIfProgIdIs }
+                    $assocsToMerge.Add($entry)
+                }
+            }
+        } catch {
+            Write-Warning "Failed to parse source associations XML from $resolvedXmlPath : $_"
+        }
+    }
+
+    # 2. Add explicit custom associations if passed
+    if ($CustomAssociations -and $CustomAssociations.Count -gt 0) {
+        foreach ($ca in $CustomAssociations) {
+            $assocsToMerge.Add($ca)
+        }
+    }
+
+    # If no custom associations were provided or discovered, leave OEMDefaultAssociations.xml untouched (no fallback)
+    if ($assocsToMerge.Count -eq 0) {
+        Write-Info "No custom default associations specified or found. Preserving original OEMDefaultAssociations.xml."
+        return
+    }
+
+    # Merge entries into target document
+    $updatedCount = 0
+    $addedCount = 0
+
+    foreach ($entry in $assocsToMerge) {
+        $id = $entry['Identifier']
+        if (-not $id -and $entry.ContainsKey('Ext')) { $id = $entry['Ext'] }
+        if (-not $id) { continue }
+
+        $progId = $entry['ProgId']
+        $appName = if ($entry.ContainsKey('ApplicationName')) { $entry['ApplicationName'] } elseif ($entry.ContainsKey('App')) { $entry['App'] } else { "" }
+
+        $existingNode = $targetDoc.DefaultAssociations.Association | Where-Object { $_.Identifier -eq $id }
+        if ($existingNode) {
+            $existingNode.SetAttribute("ProgId", $progId)
+            if ($appName) { $existingNode.SetAttribute("ApplicationName", $appName) }
+            if ($entry.ContainsKey('ApplyOnUpgrade')) { $existingNode.SetAttribute("ApplyOnUpgrade", [string]$entry['ApplyOnUpgrade']) }
+            if ($entry.ContainsKey('OverwriteIfProgIdIs')) { $existingNode.SetAttribute("OverwriteIfProgIdIs", [string]$entry['OverwriteIfProgIdIs']) }
+            $updatedCount++
+        } else {
+            $newNode = $targetDoc.CreateElement("Association")
+            $newNode.SetAttribute("Identifier", $id)
+            $newNode.SetAttribute("ProgId", $progId)
+            if ($appName) { $newNode.SetAttribute("ApplicationName", $appName) }
+            if ($entry.ContainsKey('ApplyOnUpgrade')) { $newNode.SetAttribute("ApplyOnUpgrade", [string]$entry['ApplyOnUpgrade']) }
+            if ($entry.ContainsKey('OverwriteIfProgIdIs')) { $newNode.SetAttribute("OverwriteIfProgIdIs", [string]$entry['OverwriteIfProgIdIs']) }
+            $targetDoc.DefaultAssociations.AppendChild($newNode) | Out-Null
+            $addedCount++
+        }
+    }
+
+    # Save target XML using formatted UTF-8
+    $xmlWriterSettings = [System.Xml.XmlWriterSettings]::new()
+    $xmlWriterSettings.Indent = $true
+    $xmlWriterSettings.IndentChars = "  "
+    $xmlWriterSettings.Encoding = [System.Text.UTF8Encoding]::new($false)
+    $xmlWriterSettings.OmitXmlDeclaration = $false
+
+    $writer = [System.Xml.XmlWriter]::Create($oemDest, $xmlWriterSettings)
+    try {
+        $targetDoc.Save($writer)
+    } finally {
+        $writer.Dispose()
+    }
+
+    Write-Success "Merged default associations into $oemDest (Updated: $updatedCount, Added: $addedCount, Total: $(@($targetDoc.DefaultAssociations.Association).Count)). Preserved all original system protocols."
 }
 
 function New-FileShortcut {
