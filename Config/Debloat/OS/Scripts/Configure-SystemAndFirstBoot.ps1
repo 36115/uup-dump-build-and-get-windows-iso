@@ -31,8 +31,13 @@ if (-not (Test-Path $runOnceKey)) { New-Item -Path $runOnceKey -Force | Out-Null
 Set-ItemProperty -Path $runOnceKey -Name "Telemetry Language Disable" -Value 'reg.exe add "HKCU\Control Panel\International\User Profile" /v HttpAcceptLanguageOptOut /t REG_DWORD /d 1 /f' -Force
 Write-Success "Persisted HttpAcceptLanguageOptOut in Default Profile and RunOnce."
 
-Write-Step "Generating OEMDefaultAssociations.xml and Notepad.lnk..."
-Set-OfflineDefaultAssociations -MountDir $MountDir
+Write-Step "Configuring OEM Default Associations and Notepad.lnk..."
+$assocXml = Join-Path (Split-Path $PSScriptRoot -Parent) "OEMDefaultAssociations.xml"
+if (Test-Path $assocXml) {
+    Set-OfflineDefaultAssociations -MountDir $MountDir -XmlPath $assocXml
+} else {
+    Set-OfflineDefaultAssociations -MountDir $MountDir
+}
 
 $accDir = "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories"
 New-FileShortcut -Path "$accDir\Notepad.lnk" -TargetPath "C:\Windows\System32\notepad.exe" -IconLocation "C:\Windows\System32\notepad.exe,0" -WorkingDirectory "C:\Windows\System32" -Description "Notepad"
