@@ -31,6 +31,17 @@
         'Microsoft.XboxIdentityProvider'
     )
 
+    # Force remove all framework dependencies (Microsoft.VCLibs, Microsoft.UI.Xaml, .NET.Native)
+    # WARNING: Enabling this will break the remaining Store apps above because they depend on these runtimes.
+    # Only enable if EnabledApps is empty (@()) and you want a 100% headless/legacy win32-only OS.
+    # RemoveFrameworkDependencies = $true
+
+    # Granular removal of specific legacy or unused framework dependencies (commented out by default)
+    # ExcludedDependencies = @(
+    #     'Microsoft.UI.Xaml.2.4',
+    #     'Microsoft.NET.Native.Framework.1.7'
+    # )
+
     # Universal and version-specific registry files (dynamically evaluated using exposed $targetOS number e.g. 10 or 11)
     RegistryFiles = @(
         'OS/Registry/Common.reg'
