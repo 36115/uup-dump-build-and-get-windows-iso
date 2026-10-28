@@ -36,5 +36,6 @@
         'OS/Scripts/Remove-ContentDeliveryManager.ps1'
         if ($targetOS -eq '11') { 'OS/Scripts/Remove-AIAndCloudServices.ps1' }
         'OS/Scripts/Remove-InternetExplorer.ps1'
+        'OS/Scripts/Remove-Edge.ps1'
     ) | Where-Object { $_ }
 }
