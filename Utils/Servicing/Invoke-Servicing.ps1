@@ -519,6 +519,112 @@ function Remove-OfflineSystemApp {
     }
 }
 
+function Set-OfflineRegionPolicy {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir,
+
+        [Parameter(Mandatory = $false, Position = 1)]
+        [string[]]$PolicyName = @(),
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('enabled', 'disabled')]
+        [string]$State = 'enabled',
+
+        [Parameter(Mandatory = $false)]
+        [hashtable]$PolicyMap = @{},
+
+        [Parameter(Mandatory = $false)]
+        [switch]$All
+    )
+    if (-not $All -and (-not $PolicyName -or $PolicyName.Count -eq 0) -and (-not $PolicyMap -or $PolicyMap.Count -eq 0)) {
+        Write-Warning "Set-OfflineRegionPolicy: No target policy specified."
+        return
+    }
+    $policyPath = "$MountDir\Windows\System32\IntegratedServicesRegionPolicySet.json"
+    if (-not (Test-Path $policyPath)) {
+        Write-Info "IntegratedServicesRegionPolicySet.json not found."
+        return
+    }
+
+    & takeown.exe /f $policyPath /a *> $null
+    & icacls.exe $policyPath /grant *S-1-5-32-544:F *> $null
+
+    $targetMap = @{}
+    if ($PolicyMap -and $PolicyMap.Count -gt 0) {
+        foreach ($k in $PolicyMap.Keys) {
+            $targetMap[$k] = [string]$PolicyMap[$k]
+        }
+    }
+    if ($PolicyName -and $PolicyName.Count -gt 0) {
+        foreach ($pn in $PolicyName) {
+            if (-not $targetMap.ContainsKey($pn)) {
+                $targetMap[$pn] = $State
+            }
+        }
+    }
+
+    $rawPolicy = [System.IO.File]::ReadAllText($policyPath, [System.Text.Encoding]::UTF8)
+    $updatedPolicies = [System.Collections.Generic.List[string]]::new()
+
+    try {
+        $polObj = $rawPolicy | ConvertFrom-Json
+        foreach ($p in $polObj.policies) {
+            $matched = $false
+            $targetState = $State
+
+            if ($All.IsPresent) {
+                $matched = $true
+            } else {
+                foreach ($tName in $targetMap.Keys) {
+                    if ($p.name -eq $tName -or $p.guid -eq $tName -or ($p.PSObject.Properties['$comment'] -and $p.'$comment' -like "*$tName*")) {
+                        $matched = $true
+                        $targetState = $targetMap[$tName]
+                        break
+                    }
+                }
+            }
+
+            if ($matched) {
+                $p.defaultState = $targetState
+                $updatedPolicies.Add("$($p.name)=$targetState")
+            }
+        }
+        $patchedPolicy = $polObj | ConvertTo-Json -Depth 10
+    } catch {
+        $patchedPolicy = $rawPolicy
+        if ($All.IsPresent) {
+            $patchedPolicy = [regex]::Replace(
+                $rawPolicy,
+                '("defaultState"\s*:\s*")([^"]+)(")',
+                "${1}${State}${3}"
+            )
+            $updatedPolicies.Add("*=$State")
+        } else {
+            foreach ($tName in $targetMap.Keys) {
+                $tState = $targetMap[$tName]
+                $escaped = [regex]::Escape($tName)
+                $pattern = '("name"\s*:\s*"' + $escaped + '"[\s\S]*?"defaultState"\s*:\s*")([^"]+)(")'
+                if ($patchedPolicy -match $pattern) {
+                    $patchedPolicy = [regex]::Replace($patchedPolicy, $pattern, "${1}${tState}${3}")
+                    $updatedPolicies.Add("${tName}=${tState}")
+                }
+            }
+        }
+    }
+
+    [System.IO.File]::WriteAllText($policyPath, $patchedPolicy, [System.Text.Encoding]::UTF8)
+    & icacls.exe $policyPath /setowner "NT SERVICE\TrustedInstaller" *> $null
+
+    if ($updatedPolicies.Count -gt 0) {
+        Write-Success "Updated IntegratedServicesRegionPolicySet.json policies in-place: $($updatedPolicies -join ', ')."
+    } else {
+        Write-Info "No matching policies found to update in IntegratedServicesRegionPolicySet.json."
+    }
+}
+
+
 # -------------------------------------------------------------
 # Servicing Offline Registry Hives & Running Profile Scripts
 # -------------------------------------------------------------
