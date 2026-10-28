@@ -426,3 +426,42 @@ function Get-ProfileEnabledApps {
 
     return $apps.ToArray()
 }
+
+function Get-ProfileRemoveFrameworkDependencies {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    foreach ($item in $ProfileChain) {
+        $cfg = $item.Config
+        if ($cfg.ContainsKey('RemoveFrameworkDependencies') -and $cfg.RemoveFrameworkDependencies) {
+            return [bool]$cfg.RemoveFrameworkDependencies
+        }
+    }
+    return $false
+}
+
+function Get-ProfileExcludedDependencies {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Alias('chain')]
+        [psobject[]]$ProfileChain
+    )
+
+    $excluded = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in $ProfileChain) {
+        $cfg = $item.Config
+        if ($cfg.ContainsKey('ExcludedDependencies') -and $cfg.ExcludedDependencies) {
+            foreach ($dep in $cfg.ExcludedDependencies) {
+                if ($dep -and -not $excluded.Contains($dep)) {
+                    $excluded.Add($dep)
+                }
+            }
+        }
+    }
+    return $excluded.ToArray()
+}
