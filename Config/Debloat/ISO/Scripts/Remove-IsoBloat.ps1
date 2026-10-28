@@ -29,6 +29,7 @@ if (-not (Get-Command Remove-IsoBloatItems -ErrorAction SilentlyContinue)) {
 
 # Directories to strip from sources\
 $isoBloatDirectories = @(
+    "_manifest",
     "replacementmanifests",
     "migration",
     "dlmanifests",
@@ -49,17 +50,18 @@ $isoBloatDirectories = @(
 # Upgrade manifests, compatibility databases, telemetry agents, and bloat files to strip from sources\
 $isoBloatFiles = @(
     "appraiser.dll", "appraiserres.dll",
-    "diagtrackrunner.exe", "diagnostic.dll",
+    "diagtrackrunner.exe", "diagnostic.dll", "sqmapi.dll",
     "admtv3check.dll", "itgtupg.dll", "ntdsupg.dll", "ntfrsupg.dll", "rdsupgcheck.dll", "rmsupg.dll", "wdsupgcompl.dll",
     "sflistrs1.dat", "sflistw7.dat", "sflistw8.dat", "sflistwb.dat", "sflistwt.dat",
     "sfpatrs1.inf", "sfpatw7.inf", "sfpatw8.inf", "sfpatwb.inf", "sfpatwt.inf",
     "acmigration.dll", "acres.dll", "actionqueue.dll", "adfscomp.dll", "aeinv.dll",
-    "appcompat_detailed.xsl", "appcompat_detailed_bidi.xsl", "appcompatservicing.dll",
-    "appraiser.sdb", "appraiserdatasha1.cat", "appraiserwc.dll",
+    "appcompat.xsl", "appcompat_bidi.xsl", "appcompat_detailed.xsl", "appcompat_detailed_bidi.xsl",
+    "appcompat_detailed_txt.xsl", "appcompat_detailed_bidi_txt.xsl", "appcompatservicing.dll",
+    "appraiser.sdb", "appraiserdatasha1.cat", "appraiserwc.dll", "appraisersdblatestoshash.txt",
     "background_cli.bmp", "cdplib.mof", "cdplibuninstall.mof", "clustercompliance.dll", "cmi2migxml.dll",
     "compatresources.dll", "compres.dll", "csiagent.dll", "cversion.ini", "db_msftproductionwindowssigningca.cer",
     "devinv.dll", "du.dll", "facilitator.dll", "gatherosstate.exe", "generaltel.dll",
-    "hwcompatPE.txt", "hwexcludePE.txt", "hypervcomplcheck.dll", "iasmigplugin.dll", "iiscomp.dll",
+    "hwcompatPE.txt", "hwexcludePE.txt", "hypervcomplcheck.dll", "iasmigplugin.dll", "idwbinfo.txt", "iiscomp.dll",
     "migapp.xml", "migcore.dll", "mighost.exe", "migisol.dll", "migres.dll", "migstore.dll", "migsys.dll", "migtestplugin.dll",
     "mitigation.dll", "mxeagent.dll", "nxquery.inf", "nxquery.sys", "offlineprofileutils.dll",
     "oscomps.woa.xml", "oscomps.xml", "osfilter.inf", "outofbox_windows_db.bin", "pnppropmig.dll", "product.ini",
@@ -74,13 +76,18 @@ $isoBloatFiles = @(
 # Unneeded documentation and orphaned .mui files to strip from language folders in sources\
 $isoBloatLanguageFiles = @(
     "acres.dll.mui", "actionqueue.dll.mui", "appraiserwc.dll.mui", "compatresources.dll.mui", "compres.dll.mui",
-    "credits.rtf", "erofflps.txt", "migres.dll.mui", "oobe_help_opt_in_details.rtf", "privacy.rtf",
+    "credits.rtf", "credits.txt", "credits.htm", "vofflps.rtf", "erofflps.txt", "migres.dll.mui", "oobe_help_opt_in_details.rtf", "privacy.rtf",
     "setup_help_whattokeep.rtf", "setuperror.exe.mui"
 )
 
 # Unneeded EFI boot files to strip from efi\Microsoft\boot\
 $isoBloatEfiFiles = @(
-    "boot.stl", "cdboot_noprompt.efi", "efisys_noprompt.bin"
+    "boot.stl", "cdboot_noprompt.efi", "efisys_noprompt.bin", "memtest.efi"
+)
+
+# Unneeded legacy boot files to strip from boot\
+$isoBloatBootFiles = @(
+    "memtest.exe", "bootsect.exe"
 )
 
 # Footprint directories, binaries, and manifests required by Windows 11 Modern Setup
@@ -105,4 +112,5 @@ Remove-IsoBloatItems `
     -Files $isoBloatFiles `
     -LanguageFiles $isoBloatLanguageFiles `
     -EfiFiles $isoBloatEfiFiles `
+    -BootFiles $isoBloatBootFiles `
     -FootprintExclusions $win11FootprintExclusions

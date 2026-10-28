@@ -1166,6 +1166,9 @@ function Remove-IsoBloatItems {
         [string[]]$EfiFiles = @(),
 
         [Parameter(Mandatory = $false)]
+        [string[]]$BootFiles = @(),
+
+        [Parameter(Mandatory = $false)]
         [string[]]$FootprintExclusions = @()
     )
     if (-not (Test-Path $MediaDir)) { return }
@@ -1199,6 +1202,17 @@ function Remove-IsoBloatItems {
     if ((Test-Path $efiBootDir) -and $EfiFiles) {
         foreach ($f in $EfiFiles) {
             $p = Join-Path $efiBootDir $f
+            if (Test-Path $p) {
+                Remove-Item -Path $p -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    # 2b. Strip specified legacy boot files from boot\
+    $bootDir = Join-Path $MediaDir "boot"
+    if ((Test-Path $bootDir) -and $BootFiles) {
+        foreach ($f in $BootFiles) {
+            $p = Join-Path $bootDir $f
             if (Test-Path $p) {
                 Remove-Item -Path $p -Force -ErrorAction SilentlyContinue
             }
