@@ -944,6 +944,46 @@ function Remove-OfflineCapability {
     }
 }
 
+
+function Clear-OfflineDefaultStartLayout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir
+    )
+    $shellDirs = @(
+        "$MountDir\Users\Default\AppData\Local\Microsoft\Windows\Shell"
+    )
+    if (Test-Path "$MountDir\Users") {
+        Get-ChildItem -Path "$MountDir\Users" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $userShell = Join-Path $_.FullName "AppData\Local\Microsoft\Windows\Shell"
+            if (Test-Path $userShell) {
+                $shellDirs += $userShell
+            }
+        }
+    }
+
+    $emptyLayout = '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"><LayoutOptions StartTileGroupCellWidth="6" /><DefaultLayoutOverride><StartLayoutCollection><defaultlayout:StartLayout GroupCellWidth="6" /></StartLayoutCollection></DefaultLayoutOverride></LayoutModificationTemplate>'
+
+    foreach ($sd in ($shellDirs | Select-Object -Unique)) {
+        if (-not (Test-Path $sd)) {
+            New-Item -ItemType Directory -Path $sd -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        $defLayout = Join-Path $sd "DefaultLayouts.xml"
+        [System.IO.File]::WriteAllText($defLayout, $emptyLayout, [System.Text.Encoding]::UTF8)
+        Write-Success "Blanked internal DefaultLayouts.xml in $(Split-Path $sd -Parent -Leaf)\Shell."
+
+        $modXml = Join-Path $sd "LayoutModification.xml"
+        if (Test-Path $modXml) {
+            Remove-ForceFile $modXml
+        }
+        $modJson = Join-Path $sd "LayoutModification.json"
+        if (Test-Path $modJson) {
+            Remove-ForceFile $modJson
+        }
+    }
+}
+
 function Set-OfflineDefaultAssociations {
     [CmdletBinding()]
     param(

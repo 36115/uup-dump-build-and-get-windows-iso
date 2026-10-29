@@ -32,6 +32,9 @@ Set-RegValue "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" "Telemetry
 Write-Success "Persisted HttpAcceptLanguageOptOut policy in Default Profile and Policies."
 
 Write-Step "Configuring OEM Default Associations and Notepad.lnk..."
+if ($targetOS -eq '10') {
+    Clear-OfflineDefaultStartLayout -MountDir $MountDir
+}
 $assocXml = Join-Path (Split-Path $PSScriptRoot -Parent) "OEMDefaultAssociations.xml"
 if (Test-Path $assocXml) {
     Set-OfflineDefaultAssociations -MountDir $MountDir -XmlPath $assocXml
