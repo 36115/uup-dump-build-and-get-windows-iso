@@ -433,7 +433,6 @@ function Remove-ScheduledTask {
     }
 }
 
-
 function Remove-ForceFilesByPattern {
     [CmdletBinding()]
     param(
@@ -480,6 +479,7 @@ function Mount-OfflineRegistryHives([string]$targetMountDir = "") {
     if (Test-OfflineRegistryHivesMounted) {
         return
     }
+
     Write-Step "Loading Offline Registry Hives..."
     cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
     cmd /c "reg unload HKLM\OFFLINE_SOFTWARE >nul 2>&1"
@@ -944,6 +944,40 @@ function Remove-OfflineCapability {
     }
 }
 
+function Clear-OfflineDefaultStartLayout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$MountDir
+    )
+    $shellDirs = @(
+        "$MountDir\Users\Default\AppData\Local\Microsoft\Windows\Shell"
+    )
+    if (Test-Path "$MountDir\Users") {
+        Get-ChildItem -Path "$MountDir\Users" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $userShell = Join-Path $_.FullName "AppData\Local\Microsoft\Windows\Shell"
+            if (Test-Path $userShell) {
+                $shellDirs += $userShell
+            }
+        }
+    }
+
+    $emptyLayout = '<LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"><LayoutOptions StartTileGroupCellWidth="6" /><DefaultLayoutOverride><StartLayoutCollection><defaultlayout:StartLayout GroupCellWidth="6" /></StartLayoutCollection></DefaultLayoutOverride></LayoutModificationTemplate>'
+
+    foreach ($sd in ($shellDirs | Select-Object -Unique)) {
+        if (-not (Test-Path $sd)) {
+            New-Item -ItemType Directory -Path $sd -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        $defLayout = Join-Path $sd "DefaultLayouts.xml"
+        [System.IO.File]::WriteAllText($defLayout, $emptyLayout, [System.Text.Encoding]::UTF8)
+        $relPath = if ($MountDir -and $sd.StartsWith($MountDir)) { $sd.Substring($MountDir.Length).TrimStart('\/') } else { $sd }
+        Write-Success "Blanked internal DefaultLayouts.xml in $relPath."
+
+        Remove-ForceFile (Join-Path $sd "LayoutModification.xml")
+        Remove-ForceFile (Join-Path $sd "LayoutModification.json")
+    }
+}
+
 function Set-OfflineDefaultAssociations {
     [CmdletBinding()]
     param(
@@ -1402,6 +1436,7 @@ try {
             if ($scriptCmd -and $scriptCmd.Parameters.ContainsKey('WinPeHiveKey') -and -not $scriptCmd.Parameters.ContainsKey('CustomRegPath')) {
                 continue
             }
+
             Write-Step "Executing Profile Script: $(Split-Path $s -Leaf)..."
             $scriptArgs = @{
                 MountDir      = $MountDir

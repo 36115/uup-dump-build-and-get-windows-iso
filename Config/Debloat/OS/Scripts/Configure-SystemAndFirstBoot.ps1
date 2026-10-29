@@ -32,6 +32,9 @@ Set-ItemProperty -Path $runOnceKey -Name "Telemetry Language Disable" -Value 're
 Write-Success "Persisted HttpAcceptLanguageOptOut in Default Profile and RunOnce."
 
 Write-Step "Configuring OEM Default Associations and Notepad.lnk..."
+if ($targetOS -eq '10') {
+    Clear-OfflineDefaultStartLayout -MountDir $MountDir
+}
 $assocXml = Join-Path (Split-Path $PSScriptRoot -Parent) "OEMDefaultAssociations.xml"
 if (Test-Path $assocXml) {
     Set-OfflineDefaultAssociations -MountDir $MountDir -XmlPath $assocXml
