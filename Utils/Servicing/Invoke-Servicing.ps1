@@ -442,6 +442,110 @@ function Remove-ForceFilesByPattern {
     }
 }
 
+function Test-OfflineRegistryHivesMounted {
+    if (Test-Path "HKLM:\OFFLINE_SYSTEM") { return $true }
+    if (Test-Path "HKLM:\OFFLINE_SOFTWARE") { return $true }
+    if (Test-Path "Registry::HKEY_USERS\OFFLINE_DEFAULT") { return $true }
+    return $false
+}
+
+function Mount-OfflineRegistryHives([string]$targetMountDir = "") {
+    if (-not $targetMountDir) {
+        if (Test-Path variable:MountDir) {
+            $targetMountDir = $MountDir
+        } elseif (Test-Path variable:script:MountDir) {
+            $targetMountDir = $script:MountDir
+        }
+    }
+    if (Test-OfflineRegistryHivesMounted) {
+        return
+    }
+    Write-Step "Loading Offline Registry Hives..."
+    cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
+    cmd /c "reg unload HKLM\OFFLINE_SOFTWARE >nul 2>&1"
+    cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
+
+    $sysHive = "$targetMountDir\Windows\System32\config\SYSTEM"
+    $sofHive = "$targetMountDir\Windows\System32\config\SOFTWARE"
+    $defHive = "$targetMountDir\Users\Default\NTUSER.DAT"
+
+    $loadSys = cmd /c "reg load HKLM\OFFLINE_SYSTEM `"$sysHive`" 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "Failed to load offline SYSTEM hive: $loadSys" }
+
+    $loadSof = cmd /c "reg load HKLM\OFFLINE_SOFTWARE `"$sofHive`" 2>&1"
+    if ($LASTEXITCODE -ne 0) {
+        cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
+        throw "Failed to load offline SOFTWARE hive: $loadSof"
+    }
+
+    if (Test-Path $defHive) {
+        cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
+    }
+    Write-Success "Loaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
+}
+
+function Dismount-OfflineRegistryHives {
+    if (-not (Test-OfflineRegistryHivesMounted)) {
+        return
+    }
+    if (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue) {
+        Remove-PSDrive -Name HKU -ErrorAction SilentlyContinue | Out-Null
+    }
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
+    Start-Sleep -Milliseconds 500
+
+    $hivesToUnload = @("HKLM\OFFLINE_SYSTEM", "HKLM\OFFLINE_SOFTWARE", "HKU\OFFLINE_DEFAULT")
+    foreach ($h in $hivesToUnload) {
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+            $unl = cmd /c "reg unload `"$h`" 2>&1"
+            cmd /c "reg query `"$h`" >nul 2>&1"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Success "Offline hive unloaded: $h (attempt $attempt)"
+                break
+            }
+            Write-Warning "Failed to unload $h (attempt $attempt): $unl"
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    Write-Success "Unloaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
+}
+
+function Invoke-WithoutOfflineHives {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$MountDir = "",
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Action
+    )
+    $targetMount = $MountDir
+    if (-not $targetMount) {
+        if (Test-Path variable:MountDir) {
+            $targetMount = $MountDir
+        } elseif (Test-Path variable:script:MountDir) {
+            $targetMount = $script:MountDir
+        }
+    }
+    $hivesWereMounted = Test-OfflineRegistryHivesMounted
+    if ($hivesWereMounted) {
+        Write-Info "Ensuring offline registry hives are dismounted prior to DISM operation..."
+        Dismount-OfflineRegistryHives
+    }
+    try {
+        & $Action
+    }
+    finally {
+        if ($hivesWereMounted -and $targetMount) {
+            Write-Info "Restoring offline registry hives after DISM operation..."
+            Mount-OfflineRegistryHives $targetMount
+        }
+    }
+}
+
 function Disable-OfflineFeature {
     [CmdletBinding()]
     param(
@@ -453,13 +557,16 @@ function Disable-OfflineFeature {
 
         [switch]$Remove
     )
-    $args = @("/English", "/Image:$MountDir", "/Disable-Feature", "/FeatureName:$FeatureName", "/NoRestart")
-    if ($Remove) { $args += "/Remove" }
-    $res = & dism.exe @args 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Feature $FeatureName disabled$([string](if ($Remove) { ' with payload removed' } else { '' }))."
-    } else {
-        Write-Warning "Failed to disable feature $FeatureName : $res"
+    Invoke-WithoutOfflineHives -MountDir $MountDir -Action {
+        $args = @("/English", "/Image:$MountDir", "/Disable-Feature", "/FeatureName:$FeatureName", "/NoRestart")
+        if ($Remove) { $args += "/Remove" }
+        $res = & dism.exe @args 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $statusSuffix = if ($Remove) { " with payload removed" } else { "" }
+            Write-Success "Feature $FeatureName disabled$statusSuffix."
+        } else {
+            Write-Warning "Failed to disable feature $FeatureName : $res"
+        }
     }
 }
 
@@ -475,22 +582,24 @@ function Remove-OfflineProvisionedAppxPackage {
         [Parameter(Mandatory = $false)]
         [string]$Pattern = ""
     )
-    if ($PackageName) {
-        try {
-            $null = Remove-AppxProvisionedPackage -Path $MountDir -PackageName $PackageName -ErrorAction Stop
-            Write-Success "Removed provisioned package: $PackageName"
-        } catch {
-            & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$PackageName /NoRestart *> $null
-            Write-Success "Removed provisioned package (dism fallback): $PackageName"
-        }
-    } elseif ($Pattern) {
-        $provInfo = & dism.exe /English /Image:$MountDir /Get-ProvisionedAppxPackages 2>&1
-        $matches = $provInfo | Where-Object { $_ -match '^PackageName\s*:\s*(.*)' }
-        foreach ($line in $matches) {
-            $pkg = ($line -split 'PackageName\s*:\s*')[1].Trim()
-            if ($pkg -like $Pattern) {
-                & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$pkg /NoRestart *> $null
-                Write-Success "Removed provisioned package: $pkg"
+    Invoke-WithoutOfflineHives -MountDir $MountDir -Action {
+        if ($PackageName) {
+            try {
+                $null = Remove-AppxProvisionedPackage -Path $MountDir -PackageName $PackageName -ErrorAction Stop
+                Write-Success "Removed provisioned package: $PackageName"
+            } catch {
+                & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$PackageName /NoRestart *> $null
+                Write-Success "Removed provisioned package (dism fallback): $PackageName"
+            }
+        } elseif ($Pattern) {
+            $provInfo = & dism.exe /English /Image:$MountDir /Get-ProvisionedAppxPackages 2>&1
+            $matches = $provInfo | Where-Object { $_ -match '^PackageName\s*:\s*(.*)' }
+            foreach ($line in $matches) {
+                $pkg = ($line -split 'PackageName\s*:\s*')[1].Trim()
+                if ($pkg -like $Pattern) {
+                    & dism.exe /English /Image:$MountDir /Remove-ProvisionedAppxPackage /PackageName:$pkg /NoRestart *> $null
+                    Write-Success "Removed provisioned package: $pkg"
+                }
             }
         }
     }
@@ -657,21 +766,23 @@ function Remove-OfflineCapability {
         [Parameter(Mandatory = $false)]
         [string[]]$Pattern = @()
     )
-    if ($CapabilityName) {
-        & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$CapabilityName /NoRestart *> $null
-        Write-Success "Removed capability: $CapabilityName"
-    } elseif ($Pattern -and $Pattern.Count -gt 0) {
-        try {
-            $installedCaps = @(Get-WindowsCapability -Path $MountDir -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Installed' })
-            foreach ($pat in $Pattern) {
-                $matching = $installedCaps | Where-Object { $_.Name -like $pat }
-                foreach ($c in $matching) {
-                    & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$($c.Name) /NoRestart *> $null
-                    Write-Success "Removed capability: $($c.Name)"
+    Invoke-WithoutOfflineHives -MountDir $MountDir -Action {
+        if ($CapabilityName) {
+            & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$CapabilityName /NoRestart *> $null
+            Write-Success "Removed capability: $CapabilityName"
+        } elseif ($Pattern -and $Pattern.Count -gt 0) {
+            try {
+                $installedCaps = @(Get-WindowsCapability -Path $MountDir -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Installed' })
+                foreach ($pat in $Pattern) {
+                    $matching = $installedCaps | Where-Object { $_.Name -like $pat }
+                    foreach ($c in $matching) {
+                        & dism.exe /English /Image:$MountDir /Remove-Capability /CapabilityName:$($c.Name) /NoRestart *> $null
+                        Write-Success "Removed capability: $($c.Name)"
+                    }
                 }
+            } catch {
+                Write-Warning "Capability discovery issue: $_"
             }
-        } catch {
-            Write-Warning "Capability discovery issue: $_"
         }
     }
 }
@@ -743,58 +854,94 @@ function New-FileShortcut {
     }
 }
 
-# -------------------------------------------------------------
-# Servicing Offline Registry Hives & Running Profile Scripts
-# -------------------------------------------------------------
-function Mount-OfflineRegistryHives([string]$targetMountDir) {
-    Write-Step "Loading Offline Registry Hives..."
-    cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
-    cmd /c "reg unload HKLM\OFFLINE_SOFTWARE >nul 2>&1"
-    cmd /c "reg unload HKU\OFFLINE_DEFAULT >nul 2>&1"
+function Filter-OfflineProvisionedAppxPackages {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$MountDir,
 
-    $sysHive = "$targetMountDir\Windows\System32\config\SYSTEM"
-    $sofHive = "$targetMountDir\Windows\System32\config\SOFTWARE"
-    $defHive = "$targetMountDir\Users\Default\NTUSER.DAT"
+        [Parameter(Mandatory = $false)]
+        [string[]]$EnabledApps = @(),
 
-    $loadSys = cmd /c "reg load HKLM\OFFLINE_SYSTEM `"$sysHive`" 2>&1"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to load offline SYSTEM hive: $loadSys" }
+        [Parameter(Mandatory = $false)]
+        [string[]]$ProtectedFrameworks = @(
+            'Microsoft.VCLibs*',
+            'Microsoft.UI.Xaml*',
+            'Microsoft.NET.Native.Framework*',
+            'Microsoft.NET.Native.Runtime*',
+            'Microsoft.Services.Store.Engagement*',
+            'Microsoft.WindowsAppRuntime*'
+        )
+    )
 
-    $loadSof = cmd /c "reg load HKLM\OFFLINE_SOFTWARE `"$sofHive`" 2>&1"
-    if ($LASTEXITCODE -ne 0) {
-        cmd /c "reg unload HKLM\OFFLINE_SYSTEM >nul 2>&1"
-        throw "Failed to load offline SOFTWARE hive: $loadSof"
-    }
-
-    if (Test-Path $defHive) {
-        cmd /c "reg load HKU\OFFLINE_DEFAULT `"$defHive`" >nul 2>&1"
-    }
-    Write-Success "Loaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
-}
-
-function Dismount-OfflineRegistryHives {
-    if (Get-PSDrive -Name HKU -ErrorAction SilentlyContinue) {
-        Remove-PSDrive -Name HKU -ErrorAction SilentlyContinue | Out-Null
-    }
-    [System.GC]::Collect()
-    [System.GC]::WaitForPendingFinalizers()
-    Start-Sleep -Milliseconds 500
-
-    $hivesToUnload = @("HKLM\OFFLINE_SYSTEM", "HKLM\OFFLINE_SOFTWARE", "HKU\OFFLINE_DEFAULT")
-    foreach ($h in $hivesToUnload) {
-        for ($attempt = 1; $attempt -le 5; $attempt++) {
-            [System.GC]::Collect()
-            [System.GC]::WaitForPendingFinalizers()
-            $unl = cmd /c "reg unload `"$h`" 2>&1"
-            $check = cmd /c "reg query `"$h`" 2>&1"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Success "Offline hive unloaded: $h (attempt $attempt)"
-                break
+    if (-not $EnabledApps -or $EnabledApps.Count -eq 0) {
+        if (Get-Command Get-ProfileEnabledApps -ErrorAction SilentlyContinue -and (Test-Path variable:profileChain) -and $profileChain) {
+            $EnabledApps = Get-ProfileEnabledApps -ProfileChain $profileChain
+        } elseif ((Test-Path variable:ProfileDir) -and $ProfileDir -and (Test-Path (Join-Path $ProfileDir "profile.psd1"))) {
+            $cfg = if (Get-Command Import-ProfileManifest -ErrorAction SilentlyContinue) {
+                Import-ProfileManifest -Path (Join-Path $ProfileDir "profile.psd1") -MountDir $MountDir
+            } else {
+                Import-PowerShellDataFile -Path (Join-Path $ProfileDir "profile.psd1")
             }
-            Write-Warning "Failed to unload $h (attempt $attempt): $unl"
-            Start-Sleep -Milliseconds 500
+            if ($cfg.ContainsKey('EnabledApps') -and $cfg.EnabledApps) {
+                $EnabledApps = $cfg.EnabledApps
+            }
         }
     }
-    Write-Success "Unloaded OFFLINE_SYSTEM, OFFLINE_SOFTWARE, and OFFLINE_DEFAULT hives."
+
+    if (-not $EnabledApps -or $EnabledApps.Count -eq 0) {
+        $EnabledApps = @(
+            'Microsoft.WindowsStore',
+            'Microsoft.StorePurchaseApp',
+            'Microsoft.SecHealthUI',
+            'Microsoft.DesktopAppInstaller',
+            'Microsoft.XboxIdentityProvider'
+        )
+    }
+
+    Invoke-WithoutOfflineHives -MountDir $MountDir -Action {
+        try {
+            $provPackages = @(Get-AppxProvisionedPackage -Path $MountDir -ErrorAction SilentlyContinue)
+            $removedCount = 0
+            $retainedCount = 0
+
+            foreach ($pkg in $provPackages) {
+                $isFramework = $false
+                foreach ($fw in $ProtectedFrameworks) {
+                    if ($pkg.DisplayName -like $fw -or $pkg.PackageName -like $fw) {
+                        $isFramework = $true
+                        break
+                    }
+                }
+                if ($isFramework) {
+                    $retainedCount++
+                    continue
+                }
+
+                $isAllowed = $false
+                foreach ($app in $EnabledApps) {
+                    if ($pkg.DisplayName -like "$app*" -or $pkg.PackageName -like "$app*") {
+                        $isAllowed = $true
+                        break
+                    }
+                }
+
+                if ($isAllowed) {
+                    Write-Info "Retaining provisioned app: $($pkg.DisplayName)"
+                    $retainedCount++
+                } else {
+                    Write-Info "Removing provisioned app: $($pkg.DisplayName)..."
+                    if (Remove-OfflineProvisionedAppxPackage -MountDir $MountDir -PackageName $pkg.PackageName) {
+                        $removedCount++
+                    }
+                }
+            }
+
+            Write-Success "Provisioned apps filtered: $retainedCount retained, $removedCount removed."
+        } catch {
+            Write-Warning "Provisioned Appx filtering issue: $_"
+        }
+    }
 }
 
 function Import-OfflineRegistryFile([string]$regFile) {
@@ -853,6 +1000,17 @@ function Import-OfflineRegistryFile([string]$regFile) {
     }
 }
 
+# -------------------------------------------------------------
+# PHASE 1: DISM Servicing Phase (Offline Registry Hives Dismounted)
+# -------------------------------------------------------------
+# Run DISM AppX package filtering prior to mounting offline registry hives to eliminate Error 32 sharing violations.
+Write-Step "Phase 1: Filtering Provisioned Appx Packages (DISM)..."
+Filter-OfflineProvisionedAppxPackages -MountDir $MountDir
+
+# -------------------------------------------------------------
+# PHASE 2: Offline Registry Servicing & Modular Profile Scripts
+# -------------------------------------------------------------
+Write-Step "Phase 2: Mounting Offline Registry Hives & Executing Profile Servicing..."
 Mount-OfflineRegistryHives $MountDir
 
 try {
@@ -926,10 +1084,10 @@ finally {
 }
 
 # -------------------------------------------------------------
-# Component Cleanup (/ResetBase)
+# PHASE 3: Component Cleanup (/ResetBase)
 # -------------------------------------------------------------
 if (-not $SkipCleanup) {
-    Write-Step "Running DISM Component Cleanup (/ResetBase)..."
+    Write-Step "Phase 3: Running DISM Component Cleanup (/ResetBase)..."
     & dism.exe /English /Image:$MountDir /Cleanup-Image /StartComponentCleanup /ResetBase /NoRestart *> $null
     Write-Success "Component cleanup executed successfully."
 } else {

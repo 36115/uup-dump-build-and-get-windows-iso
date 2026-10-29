@@ -408,6 +408,63 @@ function Set-UupConvertConfig {
     return $tag
 }
 
+function Set-UupCustomAppsList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$EnabledApps
+    )
+
+    $customAppsFile = Join-Path $BuildDirectory "CustomAppsList.txt"
+    if (-not (Test-Path $customAppsFile)) {
+        return
+    }
+
+    $lines = Get-Content -Path $customAppsFile
+    $newLines = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('###')) {
+            $newLines.Add($line)
+            continue
+        }
+
+        $entry = $trimmed.TrimStart('#').Trim()
+        if (-not $entry) {
+            $newLines.Add($line)
+            continue
+        }
+
+        $isWanted = $false
+        foreach ($app in $EnabledApps) {
+            if ($entry -like "$app*" -or $entry -eq $app) {
+                $isWanted = $true
+                break
+            }
+        }
+
+        if ($isWanted) {
+            $newLines.Add($entry)
+        } else {
+            $newLines.Add("# $entry")
+        }
+    }
+
+    [System.IO.File]::WriteAllLines($customAppsFile, $newLines, [System.Text.Encoding]::ASCII)
+
+    # Enable CustomList in ConvertConfig.ini if present
+    $iniFile = Join-Path $BuildDirectory "ConvertConfig.ini"
+    if (Test-Path $iniFile) {
+        $convertConfig = Get-Content -Path $iniFile -Raw
+        $convertConfig = Set-IniSetting -IniText $convertConfig -Key 'CustomList' -Value '1'
+        Set-Content -Encoding ascii -Path $iniFile -Value $convertConfig
+    }
+}
+
 function Invoke-UupDownloadProcess {
     [CmdletBinding()]
     param(
@@ -477,6 +534,39 @@ function Invoke-UupDownloadProcess {
     }
     finally {
         Pop-Location
+    }
+}
+
+function Initialize-UupCustomAppsList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory,
+        [Parameter(Mandatory = $true)]
+        [psobject[]]$ProfileChain
+    )
+
+    $enabledApps = if (Get-Command Get-ProfileEnabledApps -ErrorAction SilentlyContinue) {
+        Get-ProfileEnabledApps -ProfileChain $ProfileChain
+    } else {
+        @()
+    }
+    $removeDeps = if (Get-Command Get-ProfileRemoveFrameworkDependencies -ErrorAction SilentlyContinue) {
+        Get-ProfileRemoveFrameworkDependencies -ProfileChain $ProfileChain
+    } else {
+        $false
+    }
+    $excludedDeps = if (Get-Command Get-ProfileExcludedDependencies -ErrorAction SilentlyContinue) {
+        Get-ProfileExcludedDependencies -ProfileChain $ProfileChain
+    } else {
+        @()
+    }
+
+    if ($enabledApps -and $enabledApps.Count -gt 0 -and (Get-Command Set-UupCustomAppsList -ErrorAction SilentlyContinue)) {
+        Set-UupCustomAppsList -BuildDirectory $BuildDirectory `
+            -EnabledApps $enabledApps `
+            -RemoveFrameworkDependencies:$removeDeps `
+            -ExcludedDependencies $excludedDeps
     }
 }
 
