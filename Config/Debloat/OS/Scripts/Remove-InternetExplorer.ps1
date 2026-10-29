@@ -34,7 +34,6 @@ foreach ($dir in $ieDirs) {
 $ieBinaries = @(
     "$MountDir\Windows\System32\ie4uinit.exe",
     "$MountDir\Windows\System32\ieUnatt.exe",
-    "$MountDir\Windows\SysWOW64\ie4uinit.exe",
     "$MountDir\Windows\SysWOW64\ieUnatt.exe"
 )
 foreach ($bin in $ieBinaries) {
@@ -44,18 +43,6 @@ foreach ($bin in $ieBinaries) {
     }
 }
 
-$ieShortcuts = @(
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Internet Explorer.lnk",
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Internet Explorer.lnk",
-    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Internet Explorer.lnk",
-    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessories\Internet Explorer.lnk"
-)
-foreach ($lnk in $ieShortcuts) {
-    if (Test-Path $lnk) {
-        Remove-ForceFile $lnk
-        Write-Success "Deleted Internet Explorer shortcut: $(Split-Path $lnk -Leaf)"
-    }
-}
 
 Remove-RegKey "HKLM\SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE"
 Remove-RegKey "HKLM\SOFTWARE\WOW6432Node\Clients\StartMenuInternet\IEXPLORE.EXE"

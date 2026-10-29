@@ -30,21 +30,8 @@ Write-Success "Enforced classic Open With and suppressed Store recommendation pr
 
 Write-Step "Purging Add Folder Suggestions Dialog..."
 Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*AddSuggestedFoldersToLibraryDialog*"
-$folderSuggestBinaries = @(
-    "$MountDir\Windows\System32\FolderSuggestionsDialog.exe",
-    "$MountDir\Windows\System32\FolderSuggestions.dll",
-    "$MountDir\Windows\SysWOW64\FolderSuggestionsDialog.exe",
-    "$MountDir\Windows\SysWOW64\FolderSuggestions.dll"
-)
-foreach ($bin in $folderSuggestBinaries) {
-    if (Test-Path $bin) {
-        Remove-ForceFile $bin
-        Write-Success "Deleted FolderSuggestions binary: $(Split-Path $bin -Leaf)"
-    }
-}
-
-Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "FolderSuggestions*.mui" -Recurse
 Write-Success "Purged Folder Suggestions dialog registrations."
+
 
 Write-Step "Purging PinningConfirmationDialog SystemApp..."
 Remove-OfflineSystemApp -MountDir $MountDir -Pattern "*Microsoft.Windows.PinningConfirmationDialog*"
@@ -57,7 +44,6 @@ Write-Success "Purged File Explorer (Legacy) registrations."
 Write-Step "Purging Retail Demo Content & Retail Demo Experience (RDX)..."
 $retailDemoDirs = @(
     "$MountDir\ProgramData\Microsoft\Windows\RetailDemo",
-    "$MountDir\Windows\SystemResources\RetailDemo",
     "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy\RetailDemo"
 )
 foreach ($dir in $retailDemoDirs) {
@@ -71,13 +57,7 @@ $retailDemoBinaries = @(
     "$MountDir\Windows\System32\RDXService.dll",
     "$MountDir\Windows\System32\RDXTaskFactory.dll",
     "$MountDir\Windows\System32\Windows.System.Profile.RetailInfo.dll",
-    "$MountDir\Windows\System32\rdx.dll",
-    "$MountDir\Windows\System32\RDXClean.exe",
-    "$MountDir\Windows\System32\RDXTask.dll",
-    "$MountDir\Windows\SysWOW64\Windows.System.Profile.RetailInfo.dll",
-    "$MountDir\Windows\SysWOW64\rdx.dll",
-    "$MountDir\Windows\SysWOW64\RDXClean.exe",
-    "$MountDir\Windows\SysWOW64\RDXTask.dll"
+    "$MountDir\Windows\SysWOW64\Windows.System.Profile.RetailInfo.dll"
 )
 foreach ($bin in $retailDemoBinaries) {
     if (Test-Path $bin) {
@@ -107,20 +87,12 @@ $familyBinaries = @(
     "$MountDir\Windows\System32\WpcRefreshTask.dll",
     "$MountDir\Windows\System32\WpcTok.exe",
     "$MountDir\Windows\System32\WpcWebFilter.dll",
-    "$MountDir\Windows\System32\wpcbroker.exe",
-    "$MountDir\Windows\System32\wpccpl.dll",
-    "$MountDir\Windows\System32\wpcmig.dll",
-    "$MountDir\Windows\System32\wpcsettings.dll",
     "$MountDir\Windows\System32\FamilySafetyExt.dll",
     "$MountDir\Windows\System32\wpcatltoast.png",
     "$MountDir\Windows\System32\wpcmon.png",
     "$MountDir\Windows\SysWOW64\Wpc.dll",
     "$MountDir\Windows\SysWOW64\WpcWebFilter.dll",
-    "$MountDir\Windows\SysWOW64\FamilySafetyExt.dll",
-    "$MountDir\Windows\SysWOW64\wpcbroker.exe",
-    "$MountDir\Windows\SysWOW64\wpccpl.dll",
-    "$MountDir\Windows\SysWOW64\wpcmig.dll",
-    "$MountDir\Windows\SysWOW64\wpcsettings.dll"
+    "$MountDir\Windows\SysWOW64\FamilySafetyExt.dll"
 )
 foreach ($bin in $familyBinaries) {
     if (Test-Path $bin) {
@@ -131,9 +103,6 @@ foreach ($bin in $familyBinaries) {
 
 Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "wpc*.dll.mui" -Recurse
 
-if (Test-Path "$MountDir\Windows\System32\Tasks\Microsoft\Windows\ParentalControls") {
-    Remove-ForceDirectory "$MountDir\Windows\System32\Tasks\Microsoft\Windows\ParentalControls"
-}
 
 Remove-OfflineService "WpcMonSvc", "WpcMonTemplateSvc"
 
@@ -149,21 +118,10 @@ if (Test-Path $narratorMCAT) {
     Write-Success "Purged NarratorMCAT directory: $narratorMCAT"
 }
 
-$narratorMedia = "$MountDir\Windows\Media\Narrator"
-if (Test-Path $narratorMedia) {
-    Remove-ForceDirectory $narratorMedia
-    Write-Success "Purged Narrator Media earcons directory: $narratorMedia"
-}
-
 $narratorBinaries = @(
     "$MountDir\Windows\System32\Narrator.exe",
     "$MountDir\Windows\System32\NarratorControlTemplates.xml",
-    "$MountDir\Windows\System32\NarratorControlTemplates.xsd",
-    "$MountDir\Windows\System32\NarratorHelper.exe",
-    "$MountDir\Windows\System32\NarratorHook.dll",
-    "$MountDir\Windows\SysWOW64\Narrator.exe",
-    "$MountDir\Windows\SysWOW64\NarratorHelper.exe",
-    "$MountDir\Windows\SysWOW64\NarratorHook.dll"
+    "$MountDir\Windows\System32\NarratorControlTemplates.xsd"
 )
 foreach ($bin in $narratorBinaries) {
     if (Test-Path $bin) {
@@ -172,11 +130,10 @@ foreach ($bin in $narratorBinaries) {
     }
 }
 
-Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "Narrator*.mui" -Recurse
+Remove-ForceFilesByPattern -Path "$MountDir\Windows\System32" -Pattern "Narrator*.mui" -Recurse
 
 $narratorShortcuts = @(
-    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessibility\Narrator.lnk",
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessibility\Narrator.lnk"
+    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessibility\Narrator.lnk"
 )
 Get-ChildItem -Path "$MountDir\Users" -Filter "Narrator.lnk" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
     $narratorShortcuts += $_.FullName

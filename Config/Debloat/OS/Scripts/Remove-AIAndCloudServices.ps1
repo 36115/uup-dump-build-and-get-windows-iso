@@ -39,10 +39,7 @@ Remove-OfflineSystemApp -MountDir $MountDir -Pattern "MicrosoftWindows.Client.Co
 $coreAiBinaries = @(
     "$MountDir\Windows\System32\Windows.AI.MachineLearning.dll",
     "$MountDir\Windows\System32\Windows.AI.MachineLearning.Preview.dll",
-    "$MountDir\Windows\System32\onnxruntime.dll",
-    "$MountDir\Windows\System32\CoreAIPlatform.dll",
-    "$MountDir\Windows\System32\CoreAIRecall.dll",
-    "$MountDir\Windows\System32\RecallStorage.dll"
+    "$MountDir\Windows\System32\onnxruntime.dll"
 )
 foreach ($bin in $coreAiBinaries) {
     if (Test-Path $bin) {
@@ -51,16 +48,6 @@ foreach ($bin in $coreAiBinaries) {
     }
 }
 
-$coreAiDirs = @(
-    "$MountDir\Windows\System32\CoreAI",
-    "$MountDir\Windows\SystemResources\CoreAI"
-)
-foreach ($d in $coreAiDirs) {
-    if (Test-Path $d) {
-        Remove-ForceDirectory $d
-        Write-Success "Purged CoreAI directory: $(Split-Path $d -Leaf)"
-    }
-}
 
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" "DisableAIDataAnalysis" 1
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" "TurnOffRecall" 1

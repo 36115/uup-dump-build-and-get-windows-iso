@@ -35,38 +35,18 @@ foreach ($bin in $telemetryBinaries) {
 Remove-OfflineService "DiagTrack", "MapsBroker", "PhoneSvc"
 
 Write-Step "Purging Microsoft Usage and Quality Insights..."
-$insightsDirs = @(
-    "$MountDir\ProgramData\Microsoft\RAC",
-    "$MountDir\ProgramData\Microsoft\Diagnosis\DownloadedSettings",
-    "$MountDir\Windows\System32\appraiser",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Device Information",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Application Experience\ProgramDataUpdater",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Customer Experience Improvement Program",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Kernel\La57Cleanup",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Maintenance\WinSAT",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\RemoteAssistance\RemoteAssistanceTask",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Windows Media Sharing\UpdateLibrary",
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Work Folders"
-)
-foreach ($dir in $insightsDirs) {
-    if (Test-Path $dir) {
-        Remove-ForceDirectory $dir
-        Write-Success "Purged Quality Insights directory: $(Split-Path $dir -Leaf)"
-    }
+$insightsDir = "$MountDir\Windows\System32\appraiser"
+if (Test-Path $insightsDir) {
+    Remove-ForceDirectory $insightsDir
+    Write-Success "Purged Quality Insights directory: $(Split-Path $insightsDir -Leaf)"
 }
 
 $insightsBinaries = @(
     "$MountDir\Windows\System32\DeviceCensus.exe",
     "$MountDir\Windows\System32\invagent.dll",
     "$MountDir\Windows\System32\appraiser.dll",
-    "$MountDir\Windows\System32\appraiser.dat",
-    "$MountDir\Windows\System32\compatelrunner.exe",
-    "$MountDir\Windows\System32\Win32CompatibilityAppraiserCSP.dll",
-    "$MountDir\Windows\SysWOW64\DeviceCensus.exe",
-    "$MountDir\Windows\SysWOW64\invagent.dll",
-    "$MountDir\Windows\SysWOW64\appraiser.dll",
-    "$MountDir\Windows\SysWOW64\compatelrunner.exe"
+    "$MountDir\Windows\System32\CompatTelRunner.exe",
+    "$MountDir\Windows\System32\Win32CompatibilityAppraiserCSP.dll"
 )
 foreach ($bin in $insightsBinaries) {
     if (Test-Path $bin) {
@@ -75,7 +55,8 @@ foreach ($bin in $insightsBinaries) {
     }
 }
 
-Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern @("*DeviceCensus*.mui", "*invagent*.mui", "*appraiser*.mui", "*compatelrunner*.mui") -Recurse
+Remove-ForceFilesByPattern -Path "$MountDir\Windows\System32" -Pattern @("*DeviceCensus*.mui", "*invagent*.mui", "*appraiser*.mui", "*CompatTelRunner*.mui") -Recurse
+
 
 $insightTaskTrees = @(
     "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\Device Information",
@@ -103,15 +84,7 @@ Remove-ScheduledTask @(
 Write-Success "Purged Quality Insights files, tasks, and enforced telemetry policies."
 
 Write-Step "Purging Windows Error Reporting (WER) & Neutralizing AeDebug..."
-$werDirs = @(
-    "$MountDir\Windows\System32\Tasks\Microsoft\Windows\Windows Error Reporting"
-)
-foreach ($dir in $werDirs) {
-    if (Test-Path $dir) {
-        Remove-ForceDirectory $dir
-        Write-Success "Purged WER directory: $(Split-Path $dir -Leaf)"
-    }
-}
+
 
 $werBinaries = @(
     "$MountDir\Windows\System32\WerFault.exe",
@@ -160,16 +133,12 @@ foreach ($bin in $perfmonBinaries) {
 
 Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern @("sysmon.ocx.mui", "perfmon.exe.mui", "perfmon.msc.mui") -Recurse
 
-$perfmonShortcuts = @(
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Performance Monitor.lnk",
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows Tools\Performance Monitor.lnk"
-)
-foreach ($lnk in $perfmonShortcuts) {
-    if (Test-Path $lnk) {
-        Remove-ForceFile $lnk
-        Write-Success "Deleted shortcut: $(Split-Path $lnk -Leaf)"
-    }
+$perfmonShortcut = "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Performance Monitor.lnk"
+if (Test-Path $perfmonShortcut) {
+    Remove-ForceFile $perfmonShortcut
+    Write-Success "Deleted shortcut: $(Split-Path $perfmonShortcut -Leaf)"
 }
+
 
 Remove-ScheduledTask "\Microsoft\Windows\PLA"
 
@@ -196,7 +165,6 @@ if (Test-Path $winSatDir) {
 $winSatBinaries = @(
     "$MountDir\Windows\System32\WinSAT.exe",
     "$MountDir\Windows\System32\winsatapi.dll",
-    "$MountDir\Windows\SysWOW64\WinSAT.exe",
     "$MountDir\Windows\SysWOW64\winsatapi.dll"
 )
 foreach ($bin in $winSatBinaries) {
