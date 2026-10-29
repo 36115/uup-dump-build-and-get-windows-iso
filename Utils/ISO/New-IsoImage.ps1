@@ -1166,6 +1166,9 @@ function Remove-IsoBloatItems {
         [string[]]$EfiFiles = @(),
 
         [Parameter(Mandatory = $false)]
+        [string[]]$BootFiles = @(),
+
+        [Parameter(Mandatory = $false)]
         [string[]]$FootprintExclusions = @()
     )
     if (-not (Test-Path $MediaDir)) { return }
@@ -1183,11 +1186,24 @@ function Remove-IsoBloatItems {
         }
     }
 
-    # 2. Strip specified EFI boot files
+    # 2. Strip specified EFI boot files (protect boot.stl and memtest.efi on Windows 11)
     $efiBootDir = Join-Path $MediaDir "efi\Microsoft\boot"
     if ((Test-Path $efiBootDir) -and $EfiFiles) {
         foreach ($f in $EfiFiles) {
+            if ($TargetOS -eq '11' -and $f -match '(?i)boot\.stl|memtest') { continue }
             $p = Join-Path $efiBootDir $f
+            if (Test-Path $p) {
+                Remove-Item -Path $p -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    # 2b. Strip specified legacy boot files from boot\ (only safe on Windows 10)
+    $bootDir = Join-Path $MediaDir "boot"
+    if ((Test-Path $bootDir) -and $BootFiles) {
+        foreach ($f in $BootFiles) {
+            if ($TargetOS -eq '11' -and $f -match '(?i)memtest|bootsect') { continue }
+            $p = Join-Path $bootDir $f
             if (Test-Path $p) {
                 Remove-Item -Path $p -Force -ErrorAction SilentlyContinue
             }
