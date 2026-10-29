@@ -43,6 +43,10 @@ foreach ($bin in $oneDriveBinaries) {
 
 Remove-ForceDirectory "$MountDir\Windows\System32\Tasks\Microsoft\Windows\OneDrive"
 
+if ($targetOS -eq '10') {
+    Remove-ForceFile "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk"
+}
+
 Remove-RegValue "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" "OneDriveSetup"
 Remove-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" "OneDriveSetup"
 Remove-RegValue "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run" "OneDriveSetup"
