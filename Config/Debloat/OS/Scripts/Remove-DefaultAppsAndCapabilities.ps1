@@ -41,7 +41,6 @@ foreach ($bin in $oneDriveBinaries) {
     }
 }
 
-Remove-ForceDirectory "$MountDir\Windows\System32\Tasks\Microsoft\Windows\OneDrive"
 
 if ($targetOS -eq '10') {
     Remove-ForceFile "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk"
@@ -87,12 +86,5 @@ $capPatterns = @(
     "Hello.Face*"
 )
 Remove-OfflineCapability -MountDir $MountDir -Pattern $capPatterns
-$wmpDirs = @(
-    "$MountDir\Program Files\Windows Media Player",
-    "$MountDir\Program Files (x86)\Windows Media Player"
-)
-foreach ($dir in $wmpDirs) {
-    if (Test-Path $dir) { Remove-ForceDirectory $dir }
-}
 
 Write-Success "Windows Capabilities and legacy features purged."

@@ -62,19 +62,12 @@ if ($RemoveDefender) {
 
     $defenderFolders = @(
         "$MountDir\Program Files\Windows Defender",
-        "$MountDir\Program Files\Windows Defender Advanced Threat Protection",
-        "$MountDir\Program Files\Windows Defender Sleep",
         "$MountDir\Program Files\Windows Security",
         "$MountDir\Program Files (x86)\Windows Defender",
-        "$MountDir\Program Files (x86)\Windows Defender Advanced Threat Protection",
         "$MountDir\ProgramData\Microsoft\Windows Defender",
-        "$MountDir\ProgramData\Microsoft\Windows Defender Advanced Threat Protection",
         "$MountDir\ProgramData\Microsoft\Windows Security Health",
-        "$MountDir\ProgramData\Microsoft\Windows Security",
-        "$MountDir\Windows\System32\drivers\wd",
         "$MountDir\Windows\System32\HealthAttestationClient",
         "$MountDir\Windows\System32\SecurityHealth",
-        "$MountDir\Windows\System32\Sgrm",
         "$MountDir\Windows\System32\WebThreatDefSvc",
         "$MountDir\Windows\System32\WindowsPowerShell\v1.0\Modules\Defender",
         "$MountDir\Windows\System32\WindowsPowerShell\v1.0\Modules\DefenderPerformance",
@@ -88,15 +81,10 @@ if ($RemoveDefender) {
         }
     }
 
-    $appGuardWims = @(
-        "$MountDir\Windows\Containers\WindowsDefenderApplicationGuard.wim",
-        "$MountDir\Windows\Containers\serviced\WindowsDefenderApplicationGuard.wim"
-    )
-    foreach ($wim in $appGuardWims) {
-        if (Test-Path $wim) {
-            Remove-ForceFile $wim
-            Write-Success "Deleted Application Guard WIM: $(Split-Path $wim -Leaf)"
-        }
+    $appGuardWim = "$MountDir\Windows\Containers\serviced\WindowsDefenderApplicationGuard.wim"
+    if (Test-Path $appGuardWim) {
+        Remove-ForceFile $appGuardWim
+        Write-Success "Deleted Application Guard WIM: $(Split-Path $appGuardWim -Leaf)"
     }
 
     $defenderBinaries = @(
@@ -115,16 +103,8 @@ if ($RemoveDefender) {
         "$MountDir\Windows\System32\wscui.cpl",
         "$MountDir\Windows\System32\wscisvif.dll",
         "$MountDir\Windows\System32\wscproxystub.dll",
-        "$MountDir\Windows\System32\windowsdefenderapplicationguardcsp.dll",
-        "$MountDir\Windows\SysWOW64\SecurityHealthAgent.dll",
-        "$MountDir\Windows\SysWOW64\SecurityHealthCore.dll",
-        "$MountDir\Windows\SysWOW64\SecurityHealthProxyStub.dll",
-        "$MountDir\Windows\SysWOW64\SecurityHealthSSO.dll",
-        "$MountDir\Windows\SysWOW64\SecurityHealthSsoUdk.dll",
-        "$MountDir\Windows\SysWOW64\SecurityHealthUdk.dll",
         "$MountDir\Windows\SysWOW64\wscisvif.dll",
-        "$MountDir\Windows\SysWOW64\wscproxystub.dll",
-        "$MountDir\Windows\SysWOW64\windowsdefenderapplicationguardcsp.dll"
+        "$MountDir\Windows\SysWOW64\wscproxystub.dll"
     )
     foreach ($bin in $defenderBinaries) {
         if (Test-Path $bin) {
@@ -201,12 +181,8 @@ if ($RemoveDefender) {
         "$MountDir\Windows\System32\smartscreen.dll",
         "$MountDir\Windows\System32\smartscreenps.dll",
         "$MountDir\Windows\System32\en-US\smartscreen.exe.mui",
-        "$MountDir\Windows\System32\AppRepAgent.dll",
-        "$MountDir\Windows\System32\AppRepUX.exe",
-        "$MountDir\Windows\System32\SmartAppControl.dll",
         "$MountDir\Windows\SysWOW64\smartscreen.dll",
-        "$MountDir\Windows\SysWOW64\smartscreenps.dll",
-        "$MountDir\Windows\SysWOW64\AppRepAgent.dll"
+        "$MountDir\Windows\SysWOW64\smartscreenps.dll"
     )
     foreach ($f in $smartScreenFiles) {
         if (Test-Path $f) {
@@ -219,20 +195,6 @@ if ($RemoveDefender) {
 
     Remove-OfflineSystemApp -MountDir $MountDir -Pattern "Microsoft.Windows.AppRep.ChxApp_*"
 
-    $browserCoreFiles = @(
-        "$MountDir\Windows\System32\browsercore.exe",
-        "$MountDir\Windows\System32\browsercore.json",
-        "$MountDir\Windows\SysWOW64\browsercore.exe",
-        "$MountDir\Windows\SysWOW64\browsercore.json"
-    )
-    foreach ($bf in $browserCoreFiles) {
-        if (Test-Path $bf) {
-            Remove-ForceFile $bf
-            Write-Success "Deleted BrowserCore binary: $(Split-Path $bf -Leaf)"
-        }
-    }
-
-    Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "browsercore*.mui" -Recurse
 
     $browserCoreDir = "$MountDir\Windows\BrowserCore"
     if (Test-Path $browserCoreDir) {

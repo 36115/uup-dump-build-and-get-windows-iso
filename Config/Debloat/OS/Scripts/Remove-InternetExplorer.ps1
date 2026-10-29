@@ -19,43 +19,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Write-Step "Purging Internet Explorer & IE 32-bit..."
-$ieDirs = @(
-    "$MountDir\Program Files\Internet Explorer",
-    "$MountDir\Program Files (x86)\Internet Explorer"
-)
-foreach ($dir in $ieDirs) {
-    if (Test-Path $dir) {
-        Remove-ForceDirectory $dir
-        Write-Success "Purged Internet Explorer directory: $(Split-Path $dir -Leaf)"
-    }
+Write-Step "Purging Internet Explorer 32-bit..."
+$ieDir = "$MountDir\Program Files (x86)\Internet Explorer"
+if (Test-Path $ieDir) {
+    Remove-ForceDirectory $ieDir
+    Write-Success "Purged Internet Explorer directory: $(Split-Path $ieDir -Leaf)"
 }
 
-$ieBinaries = @(
-    "$MountDir\Windows\System32\ie4uinit.exe",
-    "$MountDir\Windows\System32\ieUnatt.exe",
-    "$MountDir\Windows\SysWOW64\ie4uinit.exe",
-    "$MountDir\Windows\SysWOW64\ieUnatt.exe"
-)
-foreach ($bin in $ieBinaries) {
-    if (Test-Path $bin) {
-        Remove-ForceFile $bin
-        Write-Success "Deleted Internet Explorer binary: $(Split-Path $bin -Leaf)"
-    }
-}
-
-$ieShortcuts = @(
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Internet Explorer.lnk",
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Internet Explorer.lnk",
-    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Internet Explorer.lnk",
-    "$MountDir\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessories\Internet Explorer.lnk"
-)
-foreach ($lnk in $ieShortcuts) {
-    if (Test-Path $lnk) {
-        Remove-ForceFile $lnk
-        Write-Success "Deleted Internet Explorer shortcut: $(Split-Path $lnk -Leaf)"
-    }
-}
 
 Remove-RegKey "HKLM\SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE"
 Remove-RegKey "HKLM\SOFTWARE\WOW6432Node\Clients\StartMenuInternet\IEXPLORE.EXE"

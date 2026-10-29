@@ -23,24 +23,15 @@ Write-Step "Removing Microsoft-RemoteDesktopConnection Feature and Shortcuts..."
 Disable-OfflineFeature -MountDir $MountDir -FeatureName "Microsoft-RemoteDesktopConnection" -Remove
 Write-Success "Feature Microsoft-RemoteDesktopConnection disabled with payload removed."
 
-$rdcShortcuts = @(
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Remote Desktop Connection.lnk",
-    "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Remote Desktop Connection.lnk"
-)
-foreach ($lnk in $rdcShortcuts) {
-    if (Test-Path $lnk) {
-        Remove-ForceFile $lnk
-        Write-Success "Deleted shortcut: $(Split-Path $lnk -Leaf)"
-    }
+$rdcShortcut = "$MountDir\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Remote Desktop Connection.lnk"
+if (Test-Path $rdcShortcut) {
+    Remove-ForceFile $rdcShortcut
+    Write-Success "Deleted shortcut: $(Split-Path $rdcShortcut -Leaf)"
 }
 
-Write-Step "Purging Remote Desktop Client - 32 bit (mstsc32)..."
+Write-Step "Purging Remote Desktop Client - 32 bit (aepic)..."
 $rdp32Binaries = @(
-    "$MountDir\Windows\SysWOW64\mstsc.exe",
-    "$MountDir\Windows\SysWOW64\mstscax.dll",
-    "$MountDir\Windows\SysWOW64\mstsctransclient.dll",
-    "$MountDir\Windows\SysWOW64\aepic.dll",
-    "$MountDir\Windows\SysWOW64\wbem\mstscax.mof"
+    "$MountDir\Windows\SysWOW64\aepic.dll"
 )
 foreach ($bin in $rdp32Binaries) {
     if (Test-Path $bin) {
@@ -49,8 +40,7 @@ foreach ($bin in $rdp32Binaries) {
     }
 }
 
-Remove-ForceFilesByPattern -Path "$MountDir\Windows\SysWOW64" -Pattern @("mstsc*.mui", "mstsctransclient*.mui", "aepic*.mui") -Recurse
-Remove-ForceFilesByPattern -Path "$MountDir\Windows\SysWOW64\wbem" -Pattern "mstscax.mfl" -Recurse
+Remove-ForceFilesByPattern -Path "$MountDir\Windows\SysWOW64" -Pattern "aepic*.mui" -Recurse
 
 Remove-RegKey "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\mstsc.exe"
 $rdp32Clsids = @(
@@ -67,18 +57,13 @@ foreach ($cls in $rdp32Clsids) {
 Write-Success "Purged 32-bit Remote Desktop Client binaries and CLSIDs."
 
 Write-Step "Purging Remote Registry Service Binaries & Pipe Server..."
-$remoteRegBinaries = @(
-    "$MountDir\Windows\System32\regsvc.dll",
-    "$MountDir\Windows\SysWOW64\regsvc.dll"
-)
-foreach ($bin in $remoteRegBinaries) {
-    if (Test-Path $bin) {
-        Remove-ForceFile $bin
-        Write-Success "Deleted RemoteRegistry binary: $(Split-Path $bin -Leaf)"
-    }
+$remoteRegBin = "$MountDir\Windows\System32\regsvc.dll"
+if (Test-Path $remoteRegBin) {
+    Remove-ForceFile $remoteRegBin
+    Write-Success "Deleted RemoteRegistry binary: $(Split-Path $remoteRegBin -Leaf)"
 }
 
-Remove-ForceFilesByPattern -Path @("$MountDir\Windows\System32", "$MountDir\Windows\SysWOW64") -Pattern "regsvc*.mui" -Recurse
+Remove-ForceFilesByPattern -Path "$MountDir\Windows\System32" -Pattern "regsvc*.mui" -Recurse
 
 Remove-OfflineService "RemoteRegistry"
 Remove-RegKey "HKLM\SYSTEM\CurrentControlSet\Control\SecurePipeServers\winreg"
