@@ -971,7 +971,8 @@ function Clear-OfflineDefaultStartLayout {
         }
         $defLayout = Join-Path $sd "DefaultLayouts.xml"
         [System.IO.File]::WriteAllText($defLayout, $emptyLayout, [System.Text.Encoding]::UTF8)
-        Write-Success "Blanked internal DefaultLayouts.xml in $(Split-Path $sd -Parent -Leaf)\Shell."
+        $relPath = if ($MountDir -and $sd.StartsWith($MountDir)) { $sd.Substring($MountDir.Length).TrimStart('\/') } else { $sd }
+        Write-Success "Blanked internal DefaultLayouts.xml in $relPath."
 
         $modXml = Join-Path $sd "LayoutModification.xml"
         if (Test-Path $modXml) {
