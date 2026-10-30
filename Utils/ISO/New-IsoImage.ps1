@@ -599,6 +599,107 @@ function Patch-BootWim {
             }
         }
 
+        $bootSourcesDir = Join-Path $mntBoot "sources"
+        if (-not (Test-Path $bootSourcesDir)) {
+            New-Item -ItemType Directory -Path $bootSourcesDir -Force | Out-Null
+        }
+
+        # Discover and inject autounattend.xml into boot.wim (Index 2)
+        $unattendCandidates = [System.Collections.Generic.List[string]]::new()
+        for ($i = $profileChain.Count - 1; $i -ge 0; $i--) {
+            $item = $profileChain[$i]
+            $baseDir = $item.Dir
+            $cfg = $item.Config
+            if ($cfg -and $cfg.ContainsKey('UnattendFile') -and $cfg.UnattendFile) {
+                $cand = Join-Path $baseDir $cfg.UnattendFile
+                if (-not (Test-Path $cand)) { $cand = Join-Path $repoRoot $cfg.UnattendFile }
+                if (Test-Path $cand) { $unattendCandidates.Add((Resolve-Path $cand).Path) }
+            }
+            foreach ($sub in @("WinPE\autounattend.xml", "WinPE\unattend.xml", "WinPE\Panther\unattend.xml", "autounattend.xml", "unattend.xml", "Unattend\unattend.xml")) {
+                $cand = Join-Path $baseDir $sub
+                if (Test-Path $cand) {
+                    $resolvedCand = (Resolve-Path $cand).Path
+                    if (-not $unattendCandidates.Contains($resolvedCand)) {
+                        $unattendCandidates.Add($resolvedCand)
+                    }
+                }
+            }
+        }
+
+        $defaultAutounattend = Join-Path $repoRoot "Config\Default\WinPE\autounattend.xml"
+        if ((-not $unattendCandidates.Count) -and (Test-Path $defaultAutounattend)) {
+            $unattendCandidates.Add((Resolve-Path $defaultAutounattend).Path)
+        }
+
+        if ($unattendCandidates.Count -gt 0) {
+            $selectedUnattend = $unattendCandidates[0]
+
+            # Inject autounattend.xml exclusively into boot.wim (X:\ root, X:\sources, and Panther cache)
+            Copy-Item -Path $selectedUnattend -Destination (Join-Path $mntBoot "autounattend.xml") -Force
+            Copy-Item -Path $selectedUnattend -Destination (Join-Path $bootSourcesDir "autounattend.xml") -Force
+
+            $pantherDir = Join-Path $mntBoot "Windows\Panther"
+            if (-not (Test-Path $pantherDir)) {
+                New-Item -ItemType Directory -Path $pantherDir -Force | Out-Null
+            }
+            Copy-Item -Path $selectedUnattend -Destination (Join-Path $pantherDir "unattend.xml") -Force
+
+            # Also set the registry pointer in WinPE SYSTEM hive so Setup immediately executes it
+            if ($hiveLoaded) {
+                $setupKey = "Registry::HKLM\WINPE_BOOTSYS\Setup"
+                if (-not (Test-Path $setupKey)) {
+                    New-Item -Path $setupKey -Force | Out-Null
+                }
+                Set-ItemProperty -Path $setupKey -Name "UnattendFile" -Value "X:\autounattend.xml" -Force
+            }
+
+            Write-Host "      [OK] Injected autounattend.xml into boot.wim ($selectedUnattend)." -ForegroundColor Green
+        }
+
+        # Discover and inject ei.cfg into Windows Setup and media sources
+        $eiCandidates = [System.Collections.Generic.List[string]]::new()
+        for ($i = $profileChain.Count - 1; $i -ge 0; $i--) {
+            $item = $profileChain[$i]
+            $baseDir = $item.Dir
+            $cfg = $item.Config
+            if ($cfg -and $cfg.ContainsKey('EiCfgFile') -and $cfg.EiCfgFile) {
+                $cand = Join-Path $baseDir $cfg.EiCfgFile
+                if (-not (Test-Path $cand)) { $cand = Join-Path $repoRoot $cfg.EiCfgFile }
+                if (Test-Path $cand) { $eiCandidates.Add((Resolve-Path $cand).Path) }
+            }
+            foreach ($sub in @("WinPE\ei.cfg", "WinPE\sources\ei.cfg", "sources\ei.cfg", "ei.cfg")) {
+                $cand = Join-Path $baseDir $sub
+                if (Test-Path $cand) {
+                    $resolvedCand = (Resolve-Path $cand).Path
+                    if (-not $eiCandidates.Contains($resolvedCand)) {
+                        $eiCandidates.Add($resolvedCand)
+                    }
+                }
+            }
+        }
+
+        $defaultEiFile = Join-Path $repoRoot "Config\Default\WinPE\ei.cfg"
+        if ((-not $eiCandidates.Count) -and (Test-Path $defaultEiFile)) {
+            $eiCandidates.Add((Resolve-Path $defaultEiFile).Path)
+        }
+
+        if ($eiCandidates.Count -gt 0) {
+            $selectedEi = $eiCandidates[0]
+            Copy-Item -Path $selectedEi -Destination (Join-Path $bootSourcesDir "ei.cfg") -Force
+            if ($DistDir -and (Test-Path (Join-Path $DistDir "sources"))) {
+                Copy-Item -Path $selectedEi -Destination (Join-Path (Join-Path $DistDir "sources") "ei.cfg") -Force
+            }
+            Write-Host "      [OK] Injected ei.cfg into Windows Setup ($selectedEi)." -ForegroundColor Green
+        } else {
+            # Default to [Channel] _Default matching reference ISO
+            $eiContent = "[Channel]`r`n_Default`r`n"
+            Set-Content -Path (Join-Path $bootSourcesDir "ei.cfg") -Value $eiContent -Encoding ASCII -Force
+            if ($DistDir -and (Test-Path (Join-Path $DistDir "sources"))) {
+                Set-Content -Path (Join-Path (Join-Path $DistDir "sources") "ei.cfg") -Value $eiContent -Encoding ASCII -Force
+            }
+            Write-Host "      [OK] Injected ei.cfg into Windows Setup ([Channel] _Default)." -ForegroundColor Green
+        }
+
         # Discover and execute WinPE component scripts from profile hierarchy
         $scannedScripts = [System.Collections.Generic.List[string]]::new()
         foreach ($item in $profileChain) {

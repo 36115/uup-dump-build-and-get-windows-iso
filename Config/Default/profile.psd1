@@ -22,6 +22,12 @@
         Cleanup   = 0
     }
 
+    # Windows Setup automation (injected into boot.wim Index 2, Panther, and sources\ei.cfg)
+    # Default answer file: 'Config/Default/WinPE/autounattend.xml'
+    # Default setup channel config: 'Config/Default/WinPE/ei.cfg' ([Channel] _Default)
+    # UnattendFile = 'WinPE/autounattend.xml'
+    # EiCfgFile    = 'WinPE/ei.cfg'
+
     # Modular servicing scripts to execute
     Scripts = @(
         if ($targetOS -eq '11') { 'Scripts/Bypass-HardwareRequirements.ps1' }
