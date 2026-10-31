@@ -57,8 +57,25 @@ Write-Step "Configuring Offline OOBE Bypass..."
 # Bypass Windows 11 Network / MSA requirement for local account setup
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "BypassNRO" 1 "REG_DWORD"
 
+# Disable privacy experience and consent prompts
+Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\OOBE" "DisablePrivacyExperience" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "PrivacyConsentStatus" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "ProtectYourPC" 3 "REG_DWORD"
+
 # Disable local account security questions prompt so OOBE only asks for username and password
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" "NoLocalPasswordResetQuestions" 1 "REG_DWORD"
+
+# Skip EULA, Wireless Network prompt, and auto-set Home network location (Win10 & Win11)
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "SetupDisplayedEula" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "HideWirelessSetupInOOBE" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "NetworkLocation" "Home" "REG_SZ"
+
+# Windows 10 specific OOBE skips (Cortana voice and assistant)
+if ($targetOS -eq '10') {
+    # Mute & disable Cortana voice and assistant in Windows 10 OOBE
+    Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "DisableVoice" 1 "REG_DWORD"
+    Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Search" "AllowCortana" 0 "REG_DWORD"
+}
 
 Write-Success "Configured offline OOBE bypass (BypassNRO = 1, NoLocalPasswordResetQuestions = 1)."
 
