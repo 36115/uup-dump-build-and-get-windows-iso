@@ -65,7 +65,8 @@ Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "ProtectYourP
 # Disable local account security questions prompt so OOBE only asks for username and password
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" "NoLocalPasswordResetQuestions" 1 "REG_DWORD"
 
-# Skip EULA, Wireless Network prompt, and auto-set Home network location (Win10 & Win11)
+# Skip Language/Region selection, EULA, Wireless Network prompt, and auto-set Home network location (Win10 & Win11)
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "SetupDisplayedLanguageSelection" 1 "REG_DWORD"
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "SetupDisplayedEula" 1 "REG_DWORD"
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "HideWirelessSetupInOOBE" 1 "REG_DWORD"
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "NetworkLocation" "Home" "REG_SZ"

@@ -634,12 +634,9 @@ function Patch-BootWim {
         if ($unattendCandidates.Count -gt 0) {
             $selectedUnattend = $unattendCandidates[0]
 
-            # Inject autounattend.xml into boot.wim and media distribution root
+            # Inject autounattend.xml exclusively into boot.wim (X:\ root, X:\sources, and Panther cache)
             Copy-Item -Path $selectedUnattend -Destination (Join-Path $mntBoot "autounattend.xml") -Force
             Copy-Item -Path $selectedUnattend -Destination (Join-Path $bootSourcesDir "autounattend.xml") -Force
-            if ($DistDir -and (Test-Path $DistDir)) {
-                Copy-Item -Path $selectedUnattend -Destination (Join-Path $DistDir "autounattend.xml") -Force
-            }
 
             $pantherDir = Join-Path $mntBoot "Windows\Panther"
             if (-not (Test-Path $pantherDir)) {
