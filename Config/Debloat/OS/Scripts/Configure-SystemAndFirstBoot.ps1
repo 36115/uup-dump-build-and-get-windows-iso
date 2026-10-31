@@ -53,19 +53,12 @@ Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\$ult
 Set-RegValue "HKLM\SYSTEM\CurrentControlSet\Control\Power\User\Default\PowerSchemes\$ultGuid" "Attributes" 0 "REG_DWORD" -Elevated
 Write-Success "Activated and unhid Ultimate Performance power scheme in offline registry."
 
-Write-Step "Configuring Offline OOBE Skips and Local Account Prompt..."
-# Bypass Windows 11 Network / Microsoft Account (MSA) requirement
+Write-Step "Configuring Offline OOBE Bypass..."
+# Bypass Windows 11 Network / MSA requirement for local account setup
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "BypassNRO" 1 "REG_DWORD"
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "HideOnlineAccountScreens" 1 "REG_DWORD"
 
-# Skip Express Settings, Privacy toggles (<ProtectYourPC>3), and Mute Voice
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "ProtectYourPC" 3 "REG_DWORD"
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "PrivacyConsentStatus" 1 "REG_DWORD"
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "DisableVoice" 1 "REG_DWORD"
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "NetworkLocation" "Home" "REG_SZ"
+# Disable local account security questions prompt so OOBE only asks for username and password
+Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" "NoLocalPasswordResetQuestions" 1 "REG_DWORD"
 
-# Skip EULA and Wireless Setup prompts
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "SetupDisplayedEula" 1 "REG_DWORD"
-Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "HideWirelessSetupInOOBE" 1 "REG_DWORD"
-Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\OOBE" "DisablePrivacyExperience" 1 "REG_DWORD"
-Write-Success "Configured offline OOBE bypass registry keys (custom username enabled at first boot)."
+Write-Success "Configured offline OOBE bypass (BypassNRO = 1, NoLocalPasswordResetQuestions = 1)."
+
