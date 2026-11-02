@@ -26,4 +26,8 @@
     Scripts = @(
         if ($targetOS -eq '11') { 'Scripts/Bypass-HardwareRequirements.ps1' }
     ) | Where-Object { $_ }
+
+    # WinPE Setup automation
+    UnattendFile = 'WinPE/autounattend.xml'
+    EiCfgFile    = 'WinPE/ei.cfg'
 }
