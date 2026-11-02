@@ -634,9 +634,12 @@ function Patch-BootWim {
         if ($unattendCandidates.Count -gt 0) {
             $selectedUnattend = $unattendCandidates[0]
 
-            # Inject autounattend.xml exclusively into boot.wim (X:\ root and X:\sources)
+            # Inject autounattend.xml into boot.wim and media distribution root
             Copy-Item -Path $selectedUnattend -Destination (Join-Path $mntBoot "autounattend.xml") -Force
             Copy-Item -Path $selectedUnattend -Destination (Join-Path $bootSourcesDir "autounattend.xml") -Force
+            if ($DistDir -and (Test-Path $DistDir)) {
+                Copy-Item -Path $selectedUnattend -Destination (Join-Path $DistDir "autounattend.xml") -Force
+            }
 
             # Also set the registry pointer in WinPE SYSTEM hive so Setup immediately executes it
             if ($hiveLoaded) {
