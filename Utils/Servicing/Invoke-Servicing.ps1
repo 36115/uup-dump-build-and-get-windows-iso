@@ -968,12 +968,15 @@ function Clear-OfflineDefaultStartLayout {
         if (-not (Test-Path $sd)) {
             New-Item -ItemType Directory -Path $sd -Force -ErrorAction SilentlyContinue | Out-Null
         }
+        $modLayout = Join-Path $sd "LayoutModification.xml"
+        [System.IO.File]::WriteAllText($modLayout, $emptyLayout, [System.Text.Encoding]::UTF8)
+
         $defLayout = Join-Path $sd "DefaultLayouts.xml"
         [System.IO.File]::WriteAllText($defLayout, $emptyLayout, [System.Text.Encoding]::UTF8)
-        $relPath = if ($MountDir -and $sd.StartsWith($MountDir)) { $sd.Substring($MountDir.Length).TrimStart('\/') } else { $sd }
-        Write-Success "Blanked internal DefaultLayouts.xml in $relPath."
 
-        Remove-ForceFile (Join-Path $sd "LayoutModification.xml")
+        $relPath = if ($MountDir -and $sd.StartsWith($MountDir)) { $sd.Substring($MountDir.Length).TrimStart('\/') } else { $sd }
+        Write-Success "Enforced blank LayoutModification.xml and DefaultLayouts.xml in $relPath."
+
         Remove-ForceFile (Join-Path $sd "LayoutModification.json")
     }
 }
