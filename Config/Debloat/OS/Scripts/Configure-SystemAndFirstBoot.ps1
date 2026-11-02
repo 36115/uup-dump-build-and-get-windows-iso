@@ -68,4 +68,12 @@ Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "NetworkLocat
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "SetupDisplayedEula" 1 "REG_DWORD"
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\OOBE" "HideWirelessSetupInOOBE" 1 "REG_DWORD"
 Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\OOBE" "DisablePrivacyExperience" 1 "REG_DWORD"
+
+# Disable local account security questions prompt so OOBE only asks for username and password
+Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" "NoLocalPasswordResetQuestions" 1 "REG_DWORD"
+
+# Windows 10 specific OOBE skips (Cortana voice and assistant)
+if ($targetOS -eq '10') {
+    Set-RegValue "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Search" "AllowCortana" 0 "REG_DWORD"
+}
 Write-Success "Configured offline OOBE bypass registry keys (custom username enabled at first boot)."
