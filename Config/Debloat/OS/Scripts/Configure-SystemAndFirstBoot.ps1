@@ -57,6 +57,7 @@ Write-Step "Configuring Offline OOBE Skips and Local Account Prompt..."
 # Bypass Windows 11 Network / Microsoft Account (MSA) requirement
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "BypassNRO" 1 "REG_DWORD"
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "HideOnlineAccountScreens" 1 "REG_DWORD"
+Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "HideWirelessSetupInOOBE" 1 "REG_DWORD"
 
 # Skip Express Settings, Privacy toggles (<ProtectYourPC>3), and Mute Voice
 Set-RegValue "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" "ProtectYourPC" 3 "REG_DWORD"
